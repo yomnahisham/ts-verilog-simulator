@@ -1,0 +1,1 @@
+module example_tb; reg clk; reg rst; wire [7:0] count; example dut(clk, rst, count); initial begin clk = 0; forever #5 clk = ~clk; end initial begin rst = 1; #100; rst = 0; #1000; $finish; end initial begin $dumpfile("waveform.vcd"); $dumpvars(0, example_tb); end endmodule
