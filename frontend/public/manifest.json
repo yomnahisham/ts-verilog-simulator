@@ -1,0 +1,16 @@
+{
+  "name": "Vivado-Make",
+  "short_name": "Vivado-Make",
+  "description": "A modern web-based alternative to Vivado for Verilog simulation",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1E1E1E",
+  "theme_color": "#1E1E1E",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "32x32",
+      "type": "image/svg+xml"
+    }
+  ]
+} 

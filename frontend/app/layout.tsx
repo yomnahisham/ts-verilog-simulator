@@ -7,6 +7,22 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'Vivado-Make',
   description: 'A modern web-based alternative to Vivado for Verilog simulation',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    apple: [
+      { url: '/logo.svg', type: 'image/svg+xml' },
+    ],
+  },
+  manifest: '/manifest.json',
+  themeColor: '#1E1E1E',
+  viewport: 'width=device-width, initial-scale=1',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Vivado-Make',
+  },
 };
 
 export default function RootLayout({
