@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from .api import simulation
@@ -22,14 +22,14 @@ app = FastAPI(
 )
 
 # Get CORS origins from environment variable or use default
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://*.amplifyapp.com,https://*.vercel.app").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://vivado-make.vercel.app").split(",")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Mount static files if directory exists
@@ -42,7 +42,7 @@ app.include_router(simulation.router, prefix="/api/v1", tags=["simulation"])
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to Vivado-Make API"}
+    return {"message": "Backend is running"}
 
 @app.get("/health")
 async def health_check():
