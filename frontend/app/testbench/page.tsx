@@ -196,7 +196,7 @@ export default function TestbenchEditor() {
             height="calc(100% - 24px)"
             defaultLanguage="verilog"
             value={testbenchCode}
-            onChange={value => setTestbenchCode(value || '')}
+            onChange={(value: string | undefined) => setTestbenchCode(value || '')}
             onMount={handleEditorDidMount}
             theme={vsCodeTheme}
             options={editorOptions}

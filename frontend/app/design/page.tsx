@@ -200,7 +200,7 @@ export default function DesignEditor() {
             height="calc(100% - 24px)"
             defaultLanguage="verilog"
             value={verilogCode}
-            onChange={value => setVerilogCode(value || '')}
+            onChange={(value: string | undefined) => setVerilogCode(value || '')}
             onMount={handleEditorDidMount}
             theme="vs-dark"
             options={editorOptions}
