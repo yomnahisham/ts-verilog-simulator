@@ -6,14 +6,14 @@
       "use": "@vercel/next"
     },
     {
-      "src": "../backend/app/main.py",
+      "src": "api/**/*.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "../backend/app/main.py"
+      "dest": "/api/$1"
     },
     {
       "src": "/(.*)",
@@ -21,7 +21,7 @@
     }
   ],
   "env": {
-    "NEXT_PUBLIC_BACKEND_URL": "https://verilog-make.onrender.com"
+    "NEXT_PUBLIC_BACKEND_URL": "/api"
   },
   "functions": {
     "api/*.py": {
