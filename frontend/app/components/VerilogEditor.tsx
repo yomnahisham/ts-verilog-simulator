@@ -112,19 +112,19 @@ const vsCodeTheme = {
 const editorOptions = {
   fontSize: 14,
   fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-  lineNumbers: 'on',
+  lineNumbers: 'on' as const,
   minimap: { enabled: false },
   scrollBeyondLastLine: false,
   automaticLayout: true,
   tabSize: 4,
-  wordWrap: 'on',
+  wordWrap: 'on' as const,
   folding: true,
   lineDecorationsWidth: 10,
   lineNumbersMinChars: 3,
-  renderLineHighlight: 'all',
+  renderLineHighlight: 'all' as const,
   scrollbar: {
-    vertical: 'visible',
-    horizontal: 'visible',
+    vertical: 'visible' as const,
+    horizontal: 'visible' as const,
     useShadows: false,
     verticalScrollbarSize: 10,
     horizontalScrollbarSize: 10,
@@ -216,10 +216,12 @@ export default function VerilogEditor() {
     // Add cursor position change listener
     editor.onDidChangeCursorPosition(() => {
       const position = editor.getPosition();
-      setCursorPosition({
-        lineNumber: position.lineNumber,
-        column: position.column,
-      });
+      if (position) {
+        setCursorPosition({
+          lineNumber: position.lineNumber,
+          column: position.column,
+        });
+      }
     });
     
     // Add focus listener to track active editor

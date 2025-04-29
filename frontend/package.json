@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "render-build": "npm install && npm run build"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
