@@ -1,11 +1,13 @@
 {
   "version": 2,
+  "buildCommand": "chmod +x vercel-build.sh && ./vercel-build.sh",
   "builds": [
     {
       "src": "app/main.py",
       "use": "@vercel/python",
       "config": {
-        "runtime": "python3.9"
+        "runtime": "python3.9",
+        "maxLambdaSize": "15mb"
       }
     }
   ],
