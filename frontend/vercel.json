@@ -1,7 +1,6 @@
 {
   "version": 2,
   "buildCommand": "./vercel-build.sh",
-  "installCommand": "npm install && pip install -r requirements.txt",
   "builds": [
     {
       "src": "package.json",
@@ -9,7 +8,11 @@
     },
     {
       "src": "api/**/*.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "15mb",
+        "runtime": "python3.11"
+      }
     }
   ],
   "routes": [
@@ -24,11 +27,5 @@
   ],
   "env": {
     "NEXT_PUBLIC_BACKEND_URL": "/api"
-  },
-  "functions": {
-    "api/*.py": {
-      "memory": 1024,
-      "maxDuration": 10
-    }
   }
 } 
