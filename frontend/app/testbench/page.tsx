@@ -49,57 +49,25 @@ const defaultTestbenchCode = `module example_tb;
 endmodule`;
 
 // VS Code-like theme configuration
-const vsCodeTheme = {
-  base: 'vs-dark',
-  inherit: true,
-  rules: [
-    { token: 'comment', foreground: '6A9955' },
-    { token: 'keyword', foreground: 'C586C0' },
-    { token: 'string', foreground: 'CE9178' },
-    { token: 'number', foreground: 'B5CEA8' },
-    { token: 'operator', foreground: 'D4D4D4' },
-    { token: 'type', foreground: '4EC9B0' },
-    { token: 'function', foreground: 'DCDCAA' },
-    { token: 'variable', foreground: '9CDCFE' },
-  ],
-  colors: {
-    'editor.background': '#1E1E1E',
-    'editor.foreground': '#D4D4D4',
-    'editor.lineHighlightBackground': '#2F3337',
-    'editor.selectionBackground': '#264F78',
-    'editor.inactiveSelectionBackground': '#3A3D41',
-    'editorCursor.foreground': '#A6A6A6',
-    'editorWhitespace.foreground': '#3A3A3A',
-    'editorLineNumber.foreground': '#858585',
-    'editorLineNumber.activeForeground': '#C6C6C6',
-    'editorIndentGuide.background': '#404040',
-    'editorIndentGuide.activeBackground': '#707070',
-    'editor.selectionHighlightBackground': '#264F78',
-    'editor.wordHighlightBackground': '#575757',
-    'editor.wordHighlightStrongBackground': '#004972',
-    'editorBracketMatch.background': '#0D3A58',
-    'editorBracketMatch.border': '#0D3A58',
-    'editorGutter.background': '#1E1E1E',
-  },
-};
+const vsCodeTheme = 'vs-dark';
 
 // Editor options for Monaco
 const editorOptions = {
   fontSize: 14,
   fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-  lineNumbers: 'on',
+  lineNumbers: 'on' as const,
   minimap: { enabled: false },
   scrollBeyondLastLine: false,
   automaticLayout: true,
   tabSize: 4,
-  wordWrap: 'on',
+  wordWrap: 'on' as const,
   folding: true,
   lineDecorationsWidth: 10,
   lineNumbersMinChars: 3,
-  renderLineHighlight: 'all',
+  renderLineHighlight: 'all' as const,
   scrollbar: {
-    vertical: 'visible',
-    horizontal: 'visible',
+    vertical: 'visible' as const,
+    horizontal: 'visible' as const,
     useShadows: false,
     verticalScrollbarSize: 10,
     horizontalScrollbarSize: 10,
