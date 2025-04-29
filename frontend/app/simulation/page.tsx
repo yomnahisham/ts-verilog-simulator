@@ -595,7 +595,12 @@ export default function SimulationPage() {
       }
 
       // Ensure testbench instantiates the correct module
-      const moduleInstRegex = new RegExp(`\\b${topModule}\\s*(?:#\\s*\\([^)]*\\))?\\s+\\w+\\s*\\(|\\b${topModule}\\s*(?:#\\s*\\([^)]*\\))?\\s*\\(|\\b${topModule}\\s*(?:#\\s*\\([^)]*\\))?\\s+\\w+\\s*$`);
+      const moduleInstRegex = new RegExp(
+        `\\b${topModule}\\s*#\\s*\\(([^)]*)\\)?\\s*\\w*\\s*\\(|` + // parameterized with or without instance name
+        `\\b${topModule}\\s*\\(([^)]*)\\)|` +                            // non-parameterized with port list
+        `\\b${topModule}\\s*#\\s*\\(([^)]*)\\)?\\s*\\w*\\s*;|` + // parameterized with or without instance name, no port list
+        `\\b${topModule}\\s*\\w*\\s*;`                                   // non-parameterized, no port list
+      );
       if (!moduleInstRegex.test(testbenchFile.content)) {
         setSimulationOutput(`Error: Testbench does not instantiate the top module "${topModule}". Please ensure your testbench instantiates the correct module. Common instantiation formats:\n` +
           `1. ${topModule} instance_name ( ... );\n` +
