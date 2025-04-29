@@ -576,91 +576,47 @@ export default function SimulationPage() {
         return file;
       });
 
-      // Find files containing the selected modules
-      const moduleFile = latestFiles.find(file => {
-        // Check for module declaration with or without parameters
-        const moduleRegex = new RegExp(`module\\s+${topModule}\\s*(?:#\\s*\\([^)]*\\))?\\s*(?:\\([^)]*\\))?\\s*;`);
-        return moduleRegex.test(file.content);
-      });
-      
+      // Find the testbench file
       const testbenchFile = latestFiles.find(file => {
-        // Check for module declaration with or without parameters
         const moduleRegex = new RegExp(`module\\s+${topTestbench}\\s*(?:#\\s*\\([^)]*\\))?\\s*(?:\\([^)]*\\))?\\s*;`);
         return moduleRegex.test(file.content);
       });
 
-      if (!moduleFile || !testbenchFile) {
-        setSimulationOutput(`Error: Could not find files containing the selected modules. Please ensure the files containing modules "${topModule}" and "${topTestbench}" are open.`);
+      if (!testbenchFile) {
+        setSimulationOutput(`Error: Could not find testbench module "${topTestbench}". Please ensure the file containing this module is open.`);
         return;
       }
 
-      // Ensure testbench instantiates the correct module
-      const moduleInstRegex = new RegExp(
-        `\\b${topModule}\\s*#\\s*\\(([^)]*)\\)?\\s*\\w*\\s*\\(|` + // parameterized with or without instance name
-        `\\b${topModule}\\s*\\(([^)]*)\\)|` +                            // non-parameterized with port list
-        `\\b${topModule}\\s*#\\s*\\(([^)]*)\\)?\\s*\\w*\\s*;|` + // parameterized with or without instance name, no port list
-        `\\b${topModule}\\s*\\w*\\s*;`                                   // non-parameterized, no port list
-      );
-      if (!moduleInstRegex.test(testbenchFile.content)) {
-        setSimulationOutput(`Error: Testbench does not instantiate the top module "${topModule}". Please ensure your testbench instantiates the correct module. Common instantiation formats:\n` +
-          `1. ${topModule} instance_name ( ... );\n` +
-          `2. ${topModule} ( ... );\n` +
-          `3. ${topModule} instance_name;\n` +
-          `4. ${topModule} #(parameters) instance_name ( ... );`);
-        return;
+      // Get all non-testbench files for the design
+      const designFiles = latestFiles.filter(file => file !== testbenchFile);
+      const designCode = designFiles.map(file => file.content).join('\n\n');
+
+      // Send simulation request to backend
+      const response = await fetch(`${BACKEND_BASE_URL}/api/v1/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          verilog_code: designCode.trim(),
+          testbench_code: testbenchFile.content.trim(),
+          top_module: topModule,
+          top_testbench: topTestbench
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
 
-      // Validate Verilog code
-      const designErrors = validateVerilogCode(moduleFile.content);
-      const testbenchErrors = validateVerilogCode(testbenchFile.content);
-
-      if (designErrors.length > 0 || testbenchErrors.length > 0) {
-        setSimulationOutput(
-          'Verilog validation errors:\n' +
-          (designErrors.length > 0 ? `Errors in ${moduleFile.name}:\n` + designErrors.join('\n') + '\n' : '') +
-          (testbenchErrors.length > 0 ? `Errors in ${testbenchFile.name}:\n` + testbenchErrors.join('\n') : '')
-        );
-        return;
-      }
-
-      // Set simulation status
-      setIsSimulating(true);
-      setSimulationOutput('Running simulation...');
-      setWaveformData(null);
-
-      try {
-        // Send simulation request to backend
-        const response = await fetch(`${BACKEND_BASE_URL}/api/v1/simulate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            verilog_code: moduleFile.content.trim(),
-            testbench_code: testbenchFile.content.trim(),
-            top_module: topModule,
-            top_testbench: topTestbench
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-          throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        
-        if (data.success) {
-          setSimulationOutput(data.output);
-          setWaveformData(data.waveform_data);
-        } else {
-          setSimulationOutput(`Simulation failed: ${data.output}`);
-        }
-      } catch (error) {
-        console.error('Simulation error:', error);
-        setSimulationOutput(`Error running simulation: ${error instanceof Error ? error.message : String(error)}`);
-      } finally {
-        setIsSimulating(false);
+      const data = await response.json();
+      
+      if (data.success) {
+        setSimulationOutput(data.output);
+        setWaveformData(data.waveform_data);
+      } else {
+        setSimulationOutput(`Simulation failed: ${data.output}`);
       }
     } catch (error) {
       console.error('Simulation error:', error);
@@ -889,41 +845,45 @@ export default function SimulationPage() {
           {/* Left panel: Editors */}
           <div className="w-1/2 flex flex-col border-r border-[#333]">
             {/* Tab bar */}
-            <div className="flex border-b border-[#333] bg-[#252526]">
-              {files.map(file => (
-                <div 
-                  key={file.id}
-                  className={`group flex items-center px-4 py-2 text-sm border-b-2 ${
-                    activeFileId === file.id
-                      ? 'border-[#0e639c] bg-[#1e1e1e] text-white'
-                      : 'border-transparent text-gray-400 hover:bg-[#2a2d2e]'
-                  }`}
-                >
-                  <button
-                    onClick={() => handleTabChange(file.id)}
-                    className="flex-1 text-left"
+            <div className="flex border-b border-[#333] bg-[#252526] w-full">
+              <div className="flex-1 overflow-x-auto whitespace-nowrap flex flex-nowrap scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+                {files.map(file => (
+                  <div 
+                    key={file.id}
+                    className={`group inline-flex items-center shrink-0 px-4 py-2 text-sm border-b-2 ${
+                      activeFileId === file.id
+                        ? 'border-[#0e639c] bg-[#1e1e1e] text-white'
+                        : 'border-transparent text-gray-400 hover:bg-[#2a2d2e]'
+                    }`}
                   >
-                    {file.name}
-                  </button>
-                  {files.length > 1 && (
                     <button
-                      onClick={() => closeFile(file.id)}
-                      className="ml-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white"
+                      onClick={() => handleTabChange(file.id)}
+                      className="flex-1 text-left whitespace-nowrap"
                     >
-                      ×
+                      {file.name}
                     </button>
-                  )}
-                </div>
-              ))}
-              <button
-                onClick={() => setShowNewFileModal(true)}
-                className="px-2 py-2 text-gray-400 hover:text-white hover:bg-[#2a2d2e]"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-              </button>
+                    {files.length > 1 && (
+                      <button
+                        onClick={() => closeFile(file.id)}
+                        className="ml-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="flex-shrink-0 border-l border-[#333]">
+                <button
+                  onClick={() => setShowNewFileModal(true)}
+                  className="px-2 py-2 text-gray-400 hover:text-white hover:bg-[#2a2d2e]"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </button>
+              </div>
             </div>
             
             {/* Editor */}
