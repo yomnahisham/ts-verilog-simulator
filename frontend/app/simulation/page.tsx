@@ -125,6 +125,17 @@ export default function SimulationPage() {
   const [showManualTestbenchInput, setShowManualTestbenchInput] = useState(false);
   const [manualTestbenchName, setManualTestbenchName] = useState('');
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [currentTime, setCurrentTime] = useState('');
+
+  // Update time every second
+  useEffect(() => {
+    const updateTime = () => {
+      setCurrentTime(new Date().toLocaleTimeString());
+    };
+    updateTime();
+    const intervalId = setInterval(updateTime, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Refs
   const editorRef = useRef<any>(null);
@@ -227,8 +238,8 @@ export default function SimulationPage() {
 
   // Function to scan for module declarations in all files
   const scanForModuleDeclarations = () => {
-    // Regex to match module declarations with optional parameters
-    const moduleRegex = /^\s*module\s+([A-Za-z_]\w*)\s*(?:\([^)]*\))?\s*;/gm;
+    // Regex to match module declarations with optional parameters and port lists
+    const moduleRegex = /^\s*module\s+([A-Za-z_]\w*)\s*(?:#\s*\([^)]*\))?\s*(?:\([^)]*\))?\s*;/gm;
     const uniqueModules = new Set<string>();
     const uniqueTestbenches = new Set<string>();
     
@@ -565,9 +576,12 @@ export default function SimulationPage() {
       }
 
       // Ensure testbench instantiates the correct module
-      const moduleInstRegex = new RegExp(`\\b${topModule}\\s+\\w+\\s*\\(`);
+      const moduleInstRegex = new RegExp(`\\b${topModule}\\s+\\w+\\s*\\(|\\b${topModule}\\s*\\(|\\b${topModule}\\s+\\w+\\s*$`);
       if (!moduleInstRegex.test(testbenchFile.content)) {
-        setSimulationOutput(`Error: Testbench does not instantiate the top module "${topModule}". Please ensure your testbench instantiates the correct module.`);
+        setSimulationOutput(`Error: Testbench does not instantiate the top module "${topModule}". Please ensure your testbench instantiates the correct module. Common instantiation formats:\n` +
+          `1. ${topModule} instance_name ( ... );\n` +
+          `2. ${topModule} ( ... );\n` +
+          `3. ${topModule} instance_name;`);
         return;
       }
 
@@ -1026,7 +1040,7 @@ export default function SimulationPage() {
           </div>
           <div>
             <span className="mr-4">Status: {backendStatus === 'online' ? 'Connected' : 'Disconnected'}</span>
-            <span>Time: {new Date().toLocaleTimeString()}</span>
+            <span>Time: {currentTime}</span>
           </div>
         </div>
       </div>
