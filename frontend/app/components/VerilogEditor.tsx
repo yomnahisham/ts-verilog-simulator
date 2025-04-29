@@ -479,7 +479,7 @@ export default function VerilogEditor() {
               height="100%"
               defaultLanguage="verilog"
               value={files.find(f => f.id === activeTab)?.content || ''}
-              onChange={(value) => {
+              onChange={(value: string | undefined) => {
                 const updatedFiles = files.map(f =>
                   f.id === activeTab ? { ...f, content: value || '' } : f
                 );
