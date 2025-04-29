@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.py",
+      "src": "app/main.py",
       "use": "@vercel/python",
       "config": {
         "runtime": "python3.9"
@@ -12,7 +12,7 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "api/index.py",
+      "dest": "app/main.py",
       "headers": {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -21,7 +21,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "api/index.py"
+      "dest": "app/main.py"
     }
   ],
   "env": {
