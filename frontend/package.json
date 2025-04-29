@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"next dev\" \"python -m uvicorn app.api.index:app --reload --port 8001\"",
+    "dev": "concurrently \"next dev\" \"python -m uvicorn app.api.main:app --reload --port 8001\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
