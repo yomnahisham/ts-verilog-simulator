@@ -1,22 +1,12 @@
 #!/bin/bash
 
-# Make the script executable
-chmod +x vercel-build.sh
+# Exit on error
+set -e
 
 # Print environment information
 echo "Current directory: $(pwd)"
 echo "Directory contents: $(ls -la)"
 echo "Python version: $(python --version)"
-
-# Install system dependencies
-echo "Installing system dependencies..."
-apt-get update
-apt-get install -y iverilog
-
-# Verify installation
-echo "Verifying iverilog installation..."
-which iverilog
-iverilog --version
 
 # Install Python dependencies
 echo "Installing Python dependencies..."

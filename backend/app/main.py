@@ -34,7 +34,7 @@ logger.info(f"CORS_ORIGINS: {CORS_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
+    allow_origins=["*"],  # Allow all origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -166,7 +166,7 @@ async def test_endpoint():
         "current_dir": os.getcwd(),
     }
 
-@app.post("/api/v1/simulate", response_model=SimulationResponse)
+@app.post("/api/v1/simulate")
 async def simulate_verilog(request: SimulationRequest):
     """Mock simulation endpoint that doesn't rely on external tools"""
     logger.info(f"Simulation request received for {request.top_module}")
@@ -203,6 +203,15 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": f"Internal server error: {str(exc)}"}
     )
+
+# For Vercel serverless functions
+app = CORSMiddleware(
+    app=app,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Handler for AWS Lambda
 from mangum import Mangum

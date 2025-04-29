@@ -3,24 +3,22 @@
 # Exit on error
 set -e
 
-# Change to frontend directory
-cd ../frontend
+# Change to backend directory
+cd "$(dirname "$0")"
 
-# Install dependencies
-echo "Installing dependencies..."
-npm install
+# Install Vercel CLI if not already installed
+if ! command -v vercel &> /dev/null; then
+    echo "Installing Vercel CLI..."
+    npm install -g vercel
+fi
 
 # Set environment variables
 echo "Setting environment variables..."
-export NODE_ENV=production
-export NEXT_PUBLIC_BACKEND_URL=/api
-
-# Build the application
-echo "Building the application..."
-npm run build
+export VERCEL_ORG_ID="your-org-id"  # Replace with your Vercel org ID
+export VERCEL_PROJECT_ID="your-project-id"  # Replace with your project ID
 
 # Deploy to Vercel
-echo "Deploying to Vercel..."
+echo "Deploying backend to Vercel..."
 vercel --prod
 
-echo "Deployment completed successfully!" 
+echo "Backend deployment completed successfully!" 
