@@ -15,10 +15,17 @@ services:
   - type: web
     name: verilog-make-backend
     env: python
-    buildCommand: cd backend && pip install -r requirements.txt
-    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: |
+      cd backend
+      python -m venv .venv
+      source .venv/bin/activate
+      pip install -r requirements.txt
+      mkdir -p static
+    startCommand: cd backend && source .venv/bin/activate && PYTHONPATH=$PYTHONPATH:. uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: PYTHONPATH
-        value: backend 
+        value: backend
+      - key: PORT
+        value: 10000 
