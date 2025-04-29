@@ -6,18 +6,27 @@
       "use": "@vercel/next"
     },
     {
-      "src": "../backend/app.py",
+      "src": "api/**/*.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "../backend/app.py"
+      "dest": "/api/$1"
     },
     {
       "src": "/(.*)",
       "dest": "/$1"
     }
-  ]
+  ],
+  "env": {
+    "NEXT_PUBLIC_BACKEND_URL": "/api"
+  },
+  "functions": {
+    "api/*.py": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  }
 } 
