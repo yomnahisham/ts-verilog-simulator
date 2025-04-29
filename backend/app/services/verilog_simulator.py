@@ -15,7 +15,26 @@ class VerilogSimulator:
     def __init__(self):
         self.temp_dir = tempfile.mkdtemp()
         logger.debug(f"Created temporary directory: {self.temp_dir}")
-        self.simulation_timeout = 30  # 30 seconds timeout
+        self.simulation_timeout = 10  # Reduced to 10 seconds to match Vercel's timeout
+        self.check_required_tools()
+        
+    def check_required_tools(self):
+        """Check if required tools are available"""
+        required_tools = ["iverilog", "vvp"]
+        missing_tools = []
+        
+        for tool in required_tools:
+            try:
+                subprocess.run(["which", tool], check=True, capture_output=True)
+            except subprocess.CalledProcessError:
+                missing_tools.append(tool)
+                
+        if missing_tools:
+            error_msg = f"Required tools not found: {', '.join(missing_tools)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+            
+        logger.debug("All required tools are available")
 
     def extract_module_names(self, verilog_code: str) -> List[str]:
         """Extract module names from Verilog code"""
@@ -51,35 +70,51 @@ class VerilogSimulator:
             compile_cmd = ["iverilog", "-o", os.path.join(temp_dir, "sim"), design_path, testbench_path]
             logger.debug(f"Compilation command: {' '.join(compile_cmd)}")
             
-            compile_result = subprocess.run(
-                compile_cmd,
-                capture_output=True,
-                text=True,
-                cwd=temp_dir
-            )
-            
-            if compile_result.returncode != 0:
-                logger.error(f"Compilation failed: {compile_result.stderr}")
-                return False, f"Compilation failed: {compile_result.stderr}", ""
-            
-            logger.debug("Compilation successful")
+            try:
+                compile_result = subprocess.run(
+                    compile_cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=temp_dir,
+                    timeout=self.simulation_timeout
+                )
+                
+                if compile_result.returncode != 0:
+                    logger.error(f"Compilation failed: {compile_result.stderr}")
+                    return False, f"Compilation failed: {compile_result.stderr}", ""
+                
+                logger.debug("Compilation successful")
+            except subprocess.TimeoutExpired:
+                logger.error("Compilation timed out")
+                return False, "Compilation timed out. The operation took too long to complete.", ""
+            except Exception as e:
+                logger.error(f"Compilation error: {str(e)}")
+                return False, f"Compilation error: {str(e)}", ""
             
             # Run the simulation
             sim_cmd = ["vvp", "-M", "/usr/local/lib/ivl", os.path.join(temp_dir, "sim"), "-vcd", vcd_path]
             logger.debug(f"Simulation command: {' '.join(sim_cmd)}")
             
-            sim_result = subprocess.run(
-                sim_cmd,
-                capture_output=True,
-                text=True,
-                cwd=temp_dir
-            )
-            
-            if sim_result.returncode != 0:
-                logger.error(f"Simulation failed: {sim_result.stderr}")
-                return False, f"Simulation failed: {sim_result.stderr}", ""
-            
-            logger.debug("Simulation successful")
+            try:
+                sim_result = subprocess.run(
+                    sim_cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=temp_dir,
+                    timeout=self.simulation_timeout
+                )
+                
+                if sim_result.returncode != 0:
+                    logger.error(f"Simulation failed: {sim_result.stderr}")
+                    return False, f"Simulation failed: {sim_result.stderr}", ""
+                
+                logger.debug("Simulation successful")
+            except subprocess.TimeoutExpired:
+                logger.error("Simulation timed out")
+                return False, "Simulation timed out. The operation took too long to complete.", ""
+            except Exception as e:
+                logger.error(f"Simulation error: {str(e)}")
+                return False, f"Simulation error: {str(e)}", ""
             
             # Check if the VCD file was generated
             if not os.path.exists(vcd_path):
@@ -100,10 +135,14 @@ class VerilogSimulator:
                         return False, "VCD file not generated", ""
             
             # Read the VCD file
-            with open(vcd_path, "r") as f:
-                vcd_content = f.read()
-            
-            logger.debug(f"VCD file read successfully, size: {len(vcd_content)} bytes")
+            try:
+                with open(vcd_path, "r") as f:
+                    vcd_content = f.read()
+                
+                logger.debug(f"VCD file read successfully, size: {len(vcd_content)} bytes")
+            except Exception as e:
+                logger.error(f"Error reading VCD file: {str(e)}")
+                return False, f"Error reading VCD file: {str(e)}", ""
             
             # Return the simulation results
             return True, sim_result.stdout, vcd_content
@@ -114,7 +153,10 @@ class VerilogSimulator:
         finally:
             # Clean up temporary files
             if temp_dir and os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception as e:
+                    logger.error(f"Error cleaning up temporary directory: {str(e)}")
 
     def prepare_testbench(self, testbench_code: str, top_module: str, top_testbench: str = None) -> str:
         """Prepare the testbench code by ensuring proper VCD dumping."""
@@ -159,7 +201,10 @@ end
     def cleanup(self):
         """Clean up temporary files"""
         logger.debug(f"Cleaning up temporary directory: {self.temp_dir}")
-        shutil.rmtree(self.temp_dir)
+        try:
+            shutil.rmtree(self.temp_dir)
+        except Exception as e:
+            logger.error(f"Error cleaning up temporary directory: {str(e)}")
 
     def simulate(self, design_code: str, testbench_code: str, top_module: str, top_testbench: str = None) -> Dict[str, Any]:
         """Simulate the Verilog code and return the results."""
