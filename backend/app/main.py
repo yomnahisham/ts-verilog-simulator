@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from .api import simulation
 import os
+from mangum import Mangum
 
 app = FastAPI(
     title="Vivado-Make API",
@@ -11,7 +12,7 @@ app = FastAPI(
 )
 
 # Get CORS origins from environment variable or use default
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://*.amplifyapp.com").split(",")
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,3 +37,6 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+# Handler for AWS Lambda
+handler = Mangum(app)

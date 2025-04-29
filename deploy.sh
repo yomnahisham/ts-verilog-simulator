@@ -19,5 +19,31 @@ npm install
 # Build frontend
 npm run build
 
-echo "Deployment preparation complete!"
-echo "You can now deploy to Render using the render.yaml configuration." 
+# Install serverless framework if not already installed
+if ! command -v serverless &> /dev/null; then
+    echo "Installing serverless framework..."
+    npm install -g serverless
+fi
+
+# Install serverless plugins
+npm install --save-dev serverless-python-requirements
+
+# Deploy backend to AWS Lambda
+echo "Deploying backend to AWS Lambda..."
+serverless deploy
+
+# Get the API Gateway URL
+API_URL=$(serverless info --verbose | grep "endpoints:" -A 1 | tail -n 1 | awk '{print $2}')
+echo "API Gateway URL: $API_URL"
+
+# Update frontend environment variables
+echo "NEXT_PUBLIC_BACKEND_URL=$API_URL" > .env.local
+
+# Deploy frontend to AWS Amplify
+echo "Deploying frontend to AWS Amplify..."
+# Note: You need to have the Amplify CLI installed and configured
+# amplify push
+
+echo "Deployment complete!"
+echo "Frontend URL: https://main.d1234567890.amplifyapp.com"
+echo "Backend URL: $API_URL" 

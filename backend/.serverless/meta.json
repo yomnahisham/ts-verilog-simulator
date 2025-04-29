@@ -1,0 +1,113 @@
+{
+  "/Users/yomnahisham/Documents/vivado-make/backend/serverless.yml": {
+    "versionFramework": "4.14.1",
+    "servicePath": "/Users/yomnahisham/Documents/vivado-make/backend/serverless.yml",
+    "serviceConfigFileName": "serverless.yml",
+    "service": {
+      "service": "verilog-simulator-backend",
+      "provider": {
+        "name": "aws",
+        "runtime": "python3.9",
+        "stage": "dev",
+        "region": "us-east-1",
+        "environment": {
+          "NODE_ENV": "dev"
+        },
+        "iamRoleStatements": [
+          {
+            "Effect": "Allow",
+            "Action": [
+              "lambda:InvokeFunction"
+            ],
+            "Resource": "*"
+          }
+        ],
+        "versionFunctions": true
+      },
+      "functions": {
+        "api": {
+          "handler": "app/main.handler",
+          "events": [
+            {
+              "http": {
+                "path": "/api/{proxy+}",
+                "method": "ANY",
+                "cors": true
+              }
+            }
+          ],
+          "timeout": 30,
+          "memorySize": 256,
+          "name": "verilog-simulator-backend-dev-api"
+        }
+      },
+      "plugins": [
+        "serverless-python-requirements"
+      ],
+      "custom": {
+        "pythonRequirements": {
+          "layer": {
+            "name": "python-deps",
+            "description": "Python dependencies for verilog-simulator"
+          },
+          "noDeploy": [
+            "pytest",
+            "pytest-cov",
+            "black",
+            "flake8"
+          ]
+        }
+      }
+    },
+    "provider": {
+      "name": "aws",
+      "runtime": "python3.9",
+      "stage": "dev",
+      "region": "us-east-1",
+      "environment": {
+        "NODE_ENV": "dev"
+      },
+      "iamRoleStatements": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "lambda:InvokeFunction"
+          ],
+          "Resource": "*"
+        }
+      ],
+      "versionFunctions": true
+    },
+    "dashboard": {
+      "isEnabledForService": false,
+      "requiredAuthentication": false,
+      "orgFeaturesInUse": null,
+      "orgObservabilityIntegrations": null,
+      "serviceAppId": null,
+      "serviceProvider": null,
+      "instanceParameters": null
+    },
+    "error": {
+      "message": "User: arn:aws:iam::826783600058:user/adminyomnaaccess is not authorized to perform: cloudformation:DescribeStackResource on resource: arn:aws:cloudformation:us-east-1:826783600058:stack/verilog-simulator-backend-dev/* because no identity-based policy allows the cloudformation:DescribeStackResource action",
+      "stack": "ServerlessError2: User: arn:aws:iam::826783600058:user/adminyomnaaccess is not authorized to perform: cloudformation:DescribeStackResource on resource: arn:aws:cloudformation:us-east-1:826783600058:stack/verilog-simulator-backend-dev/* because no identity-based policy allows the cloudformation:DescribeStackResource action\n    at file:///Users/yomnahisham/.serverless/releases/4.14.1/package/dist/sf-core.js:884:36\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async persistentRequest (file:///Users/yomnahisham/.serverless/releases/4.14.1/package/dist/sf-core.js:883:1959)",
+      "code": "AWS_CLOUD_FORMATION_DESCRIBE_STACK_RESOURCE_ACCESS_DENIED"
+    },
+    "serviceRawFile": "service: verilog-simulator-backend\n\nprovider:\n  name: aws\n  runtime: python3.9\n  stage: ${opt:stage, 'dev'}\n  region: ${opt:region, 'us-east-1'}\n  environment:\n    NODE_ENV: ${self:provider.stage}\n  iamRoleStatements:\n    - Effect: Allow\n      Action:\n        - lambda:InvokeFunction\n      Resource: \"*\"\n\nfunctions:\n  api:\n    handler: app/main.handler\n    events:\n      - http:\n          path: /api/{proxy+}\n          method: ANY\n          cors: true\n    timeout: 30\n    memorySize: 256\n\nplugins:\n  - serverless-python-requirements\n\ncustom:\n  pythonRequirements:\n    layer:\n      name: python-deps\n      description: Python dependencies for verilog-simulator\n    noDeploy:\n      - pytest\n      - pytest-cov\n      - black\n      - flake8 ",
+    "command": [
+      "deploy"
+    ],
+    "options": {
+      "aws-profile": "verilog-simulator"
+    },
+    "orgId": "4b293d99-aa79-40cd-be15-dc5254c62ffb",
+    "orgName": "americanuniversityincairo",
+    "userId": "70kTYFYmnlGYSyT5hZ",
+    "userName": "americanuniversityincairo",
+    "serviceProviderAwsAccountId": "826783600058",
+    "serviceProviderAwsCfStackId": null,
+    "serviceProviderAwsCfStackCreated": null,
+    "serviceProviderAwsCfStackUpdated": null,
+    "serviceProviderAwsCfStackStatus": null,
+    "serviceProviderAwsCfStackOutputs": null
+  }
+}
