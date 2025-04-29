@@ -3,11 +3,7 @@
   "builds": [
     {
       "src": "app/main.py",
-      "use": "@vercel/python",
-      "config": {
-        "buildCommand": "bash vercel-build.sh",
-        "maxLambdaSize": "15mb"
-      }
+      "use": "@vercel/python"
     }
   ],
   "routes": [
@@ -17,7 +13,6 @@
     }
   ],
   "env": {
-    "PYTHONPATH": ".",
-    "DEBUG": "true"
+    "PYTHONPATH": "."
   }
 } 
