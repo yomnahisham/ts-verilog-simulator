@@ -1,9 +1,12 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, validator
 import os
 import logging
 import sys
+import json
+import time
 
 # Configure logging to output to stdout/stderr for Vercel
 logging.basicConfig(
@@ -37,6 +40,111 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Define models for the simulation API
+class SimulationRequest(BaseModel):
+    verilog_code: str
+    testbench_code: str
+    top_module: str
+    top_testbench: str
+
+    @validator('verilog_code', 'testbench_code')
+    def validate_code(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Code cannot be empty")
+        return v.strip()
+
+    @validator('top_module', 'top_testbench')
+    def validate_module_names(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Module name cannot be empty")
+        if not v.strip().isidentifier():
+            raise ValueError("Module name must be a valid Verilog identifier")
+        return v.strip()
+
+class SimulationResponse(BaseModel):
+    success: bool
+    output: str
+    waveform_data: str
+
+# Mock simulation function
+def mock_simulate(verilog_code, testbench_code, top_module, top_testbench):
+    """Mock simulation function that doesn't rely on external tools"""
+    logger.info(f"Mock simulating {top_module} with testbench {top_testbench}")
+    
+    # Simulate processing time
+    time.sleep(0.5)
+    
+    # Generate mock output
+    output = f"Mock simulation of {top_module} with testbench {top_testbench}\n"
+    output += "Simulation completed successfully\n"
+    
+    # Generate mock waveform data
+    waveform_data = """
+$date
+    Date text. For example: June 26, 1989 10:05:41
+$end
+$version
+    VCD generator version info
+$end
+$timescale
+    1s
+$end
+$scope module top $end
+$var wire 1 ! clk $end
+$var wire 1 " rst $end
+$var wire 8 # data $end
+$upscope $end
+$enddefinitions $end
+#0
+$dumpvars
+0!
+0"
+b00000000 #
+$end
+#100
+1!
+0"
+b00000001 #
+#200
+0!
+0"
+b00000010 #
+#300
+1!
+0"
+b00000011 #
+#400
+0!
+0"
+b00000100 #
+#500
+1!
+0"
+b00000101 #
+#600
+0!
+0"
+b00000110 #
+#700
+1!
+0"
+b00000111 #
+#800
+0!
+0"
+b00001000 #
+#900
+1!
+0"
+b00001001 #
+#1000
+0!
+0"
+b00001010 #
+"""
+    
+    return True, output, waveform_data
+
 @app.get("/")
 async def root():
     logger.info("Root endpoint called")
@@ -57,6 +165,32 @@ async def test_endpoint():
         "python_version": sys.version,
         "current_dir": os.getcwd(),
     }
+
+@app.post("/api/v1/simulate", response_model=SimulationResponse)
+async def simulate_verilog(request: SimulationRequest):
+    """Mock simulation endpoint that doesn't rely on external tools"""
+    logger.info(f"Simulation request received for {request.top_module}")
+    try:
+        success, output, waveform_data = mock_simulate(
+            request.verilog_code,
+            request.testbench_code,
+            request.top_module,
+            request.top_testbench
+        )
+        
+        if not success:
+            raise HTTPException(status_code=400, detail=output)
+            
+        return SimulationResponse(
+            success=success,
+            output=output,
+            waveform_data=waveform_data
+        )
+    except Exception as e:
+        logger.error(f"Error in simulation: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Simulation error: {str(e)}")
 
 # Global exception handler
 @app.exception_handler(Exception)
