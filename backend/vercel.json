@@ -5,7 +5,8 @@
       "src": "app/main.py",
       "use": "@vercel/python",
       "config": {
-        "buildCommand": "bash vercel-build.sh"
+        "buildCommand": "bash vercel-build.sh",
+        "maxLambdaSize": "15mb"
       }
     }
   ],
@@ -16,6 +17,7 @@
     }
   ],
   "env": {
-    "PYTHONPATH": "."
+    "PYTHONPATH": ".",
+    "DEBUG": "true"
   }
 } 
