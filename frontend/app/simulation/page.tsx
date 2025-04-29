@@ -538,6 +538,8 @@ export default function SimulationPage() {
 
   // Run simulation
   const runSimulation = async () => {
+    // Force a re-scan for modules before running simulation
+    scanForModuleDeclarations();
     try {
       // Check if backend is available
       const isBackendAvailable = await checkBackendStatus();
@@ -566,16 +568,24 @@ export default function SimulationPage() {
         return;
       }
 
+      // Always get the latest file content from Monaco editor models
+      const latestFiles = files.map(file => {
+        if (editorModels[file.id] && typeof editorModels[file.id].getValue === 'function') {
+          return { ...file, content: editorModels[file.id].getValue() };
+        }
+        return file;
+      });
+
       // Find files containing the selected modules
-      const moduleFile = files.find(file => {
+      const moduleFile = latestFiles.find(file => {
         // Check for module declaration with or without parameters
-        const moduleRegex = new RegExp(`module\\s+${topModule}\\s*(?:#\\s*\\([^)]*\\))?\\s*(?:\([^)]*\))?\\s*;`);
+        const moduleRegex = new RegExp(`module\\s+${topModule}\\s*(?:#\\s*\\([^)]*\\))?\\s*(?:\\([^)]*\\))?\\s*;`);
         return moduleRegex.test(file.content);
       });
       
-      const testbenchFile = files.find(file => {
+      const testbenchFile = latestFiles.find(file => {
         // Check for module declaration with or without parameters
-        const moduleRegex = new RegExp(`module\\s+${topTestbench}\\s*(?:#\\s*\\([^)]*\\))?\\s*(?:\([^)]*\))?\\s*;`);
+        const moduleRegex = new RegExp(`module\\s+${topTestbench}\\s*(?:#\\s*\\([^)]*\\))?\\s*(?:\\([^)]*\\))?\\s*;`);
         return moduleRegex.test(file.content);
       });
 
