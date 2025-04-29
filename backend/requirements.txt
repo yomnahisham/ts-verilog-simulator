@@ -1,6 +1,6 @@
-fastapi==0.95.2
-uvicorn==0.24.0
+fastapi==0.88.0
+uvicorn==0.20.0
 mangum==0.17.0
-python-dotenv==1.0.0
-pydantic==1.10.13
-python-multipart==0.0.6
+python-dotenv==0.21.0
+pydantic==1.10.2
+python-multipart==0.0.5
