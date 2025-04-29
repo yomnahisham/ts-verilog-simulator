@@ -13,7 +13,7 @@ interface File {
 }
 
 // Backend configuration
-const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
+const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://ts-verilog-simulator-backend.vercel.app';
 const BACKEND_API_URL = `${BACKEND_BASE_URL}/api/v1`;
 const USE_REAL_SIMULATION = true; // Flag to use real simulation instead of mock data
 

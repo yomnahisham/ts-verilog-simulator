@@ -22,7 +22,7 @@ app = FastAPI(
 )
 
 # Get CORS origins from environment variable or use default
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://vivado-make.vercel.app").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://ts-verilog-simulator-frontend.vercel.app").split(",")
 
 app.add_middleware(
     CORSMiddleware,
