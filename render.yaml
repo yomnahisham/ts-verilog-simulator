@@ -3,7 +3,11 @@ services:
   - type: web
     name: verilog-make-frontend
     env: node
-    buildCommand: cd frontend && npm install && npm run build
+    buildCommand: |
+      cd frontend
+      npm install
+      npm install --save-dev typescript @types/react @types/node
+      npm run build
     startCommand: cd frontend && npm run start
     envVars:
       - key: NODE_ENV
