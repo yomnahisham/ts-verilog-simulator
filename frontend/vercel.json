@@ -1,5 +1,7 @@
 {
   "version": 2,
+  "buildCommand": "./vercel-build.sh",
+  "installCommand": "npm install && pip install -r requirements.txt",
   "builds": [
     {
       "src": "package.json",
