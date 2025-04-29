@@ -1,0 +1,12 @@
+{
+  "name": "ts-verilog-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "render-build": "cd frontend && npm install && npm run build",
+    "start": "cd frontend && npm start"
+  },
+  "workspaces": [
+    "frontend"
+  ]
+} 
