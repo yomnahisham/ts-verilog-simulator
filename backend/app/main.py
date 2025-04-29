@@ -50,21 +50,38 @@ class SimulationRequest(BaseModel):
     @validator('verilog_code', 'testbench_code')
     def validate_code(cls, v):
         if not v or not v.strip():
-            raise ValueError("Code cannot be empty")
+            raise ValueError('Code cannot be empty')
         return v.strip()
 
     @validator('top_module', 'top_testbench')
     def validate_module_names(cls, v):
         if not v or not v.strip():
-            raise ValueError("Module name cannot be empty")
-        if not v.strip().isidentifier():
-            raise ValueError("Module name must be a valid Verilog identifier")
+            raise ValueError('Module name cannot be empty')
         return v.strip()
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "verilog_code": "module example(input clk, output reg q); always @(posedge clk) q <= ~q; endmodule",
+                "testbench_code": "module testbench; reg clk; wire q; example dut(clk, q); initial begin clk = 0; forever #5 clk = ~clk; end endmodule",
+                "top_module": "example",
+                "top_testbench": "testbench"
+            }
+        }
 
 class SimulationResponse(BaseModel):
     success: bool
     output: str
-    waveform_data: str
+    waveform_data: str = ""
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "success": True,
+                "output": "Simulation completed successfully",
+                "waveform_data": "base64_encoded_waveform_data"
+            }
+        }
 
 # Mock simulation function
 def mock_simulate(verilog_code, testbench_code, top_module, top_testbench):
