@@ -81,30 +81,30 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   const TIME_MARKER_HEIGHT = 30;
   const TRANSITION_PADDING = 5;
 
-  // Modern color palette
+  // Modern color palette - VS Code Monokai theme
   const COLORS = {
     background: {
-      primary: '#1A1B26',
-      secondary: '#24283B',
-      hover: 'rgba(187, 154, 247, 0.1)',
-      selected: 'rgba(187, 154, 247, 0.2)'
+      primary: '#1E1E1E',    // VS Code background
+      secondary: '#252526',  // VS Code sidebar
+      hover: 'rgba(255, 255, 255, 0.1)',
+      selected: 'rgba(255, 255, 255, 0.15)'
     },
     text: {
-      primary: '#A9B1D6',
-      secondary: '#565F89',
-      accent: '#BB9AF7'
+      primary: '#D4D4D4',    // VS Code default text
+      secondary: '#858585',  // VS Code muted text
+      accent: '#569CD6'      // VS Code blue
     },
     signals: {
-      clock: '#7AA2F7',    // Blue
-      reset: '#F7768E',    // Red
-      input: '#9ECE6A',    // Green
-      output: '#E0AF68',   // Orange
-      bus: '#BB9AF7',      // Purple
-      default: '#7DCFFF'   // Light Blue
+      clock: '#4EC9B0',     // VS Code teal
+      reset: '#CE9178',     // VS Code orange
+      input: '#DCDCAA',     // VS Code yellow
+      output: '#9CDCFE',    // VS Code light blue
+      bus: '#C586C0',       // VS Code purple
+      default: '#569CD6'    // VS Code blue
     },
     grid: {
-      minor: '#24283B',
-      major: '#2F3240'
+      minor: '#2D2D2D',     // VS Code grid
+      major: '#3D3D3D'      // VS Code grid
     }
   };
 
@@ -1157,10 +1157,10 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
         onClick={handleClick}
       />
       
-      {/* Enhanced hover info display */}
+      {/* Enhanced hover info display with VS Code styling */}
       {hoverInfo && (
         <div 
-          className="absolute bg-[#1A1B26]/90 border border-[#24283B] rounded-lg shadow-lg p-3 text-sm"
+          className="absolute bg-[#1E1E1E]/90 border border-[#3D3D3D] rounded-lg shadow-lg p-3 text-sm"
           style={{
             left: Math.min(hoverInfo.x + 10, containerRef.current?.clientWidth || 0 - 200),
             top: Math.min(hoverInfo.y + 10, containerRef.current?.clientHeight || 0 - 100),
@@ -1168,7 +1168,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
             zIndex: 1000
           }}
         >
-          <div className="text-[#BB9AF7] font-mono mb-2">
+          <div className="text-[#569CD6] font-mono mb-2">
             Time: {hoverInfo.time.toFixed(2)}ns
           </div>
           <div className="space-y-1">
@@ -1178,8 +1178,8 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
                   className="w-3 h-3 rounded-full" 
                   style={{ backgroundColor: signal.color }}
                 />
-                <span className="text-[#A9B1D6] font-mono">{signal.name}:</span>
-                <span className="text-[#7DCFFF] font-mono">
+                <span className="text-[#D4D4D4] font-mono">{signal.name}:</span>
+                <span className="text-[#9CDCFE] font-mono">
                   {signal.value.startsWith('b') ? 
                     `${parseInt(signal.value.slice(1), 2).toString(16).toUpperCase()}h` : 
                     signal.value}
