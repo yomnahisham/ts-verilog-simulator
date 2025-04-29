@@ -8,7 +8,14 @@ Vivado-Make is a modern, web-based alternative to Vivado for Verilog simulation.
 
 - **Modern Web Interface**: Clean, intuitive UI inspired by VS Code for a familiar development experience
 - **Real-time Verilog Simulation**: Run simulations directly in your browser
-- **Waveform Visualization**: View simulation results in an interactive waveform viewer
+- **Waveform Visualization**: 
+  - Interactive waveform viewer with modern styling
+  - Detailed signal information on hover
+  - Color-coded signals for better visibility
+  - Compact signal name display for more waveform space
+  - Professional color scheme inspired by modern IDEs
+  - Support for both single-bit and bus signals
+  - Automatic signal grouping and categorization
 - **Syntax Highlighting**: Advanced Verilog syntax highlighting with Monaco Editor
 - **Module Detection**: Automatic detection of modules and testbenches in your code
 - **Responsive Design**: Works on desktop and tablet devices
@@ -31,7 +38,7 @@ Vivado-Make is a modern, web-based alternative to Vivado for Verilog simulation.
 
 ### Online Demo
 
-Visit our [live demo](https://ts-verilog-simulator-frontend.vercel.app) to try Vivado-Make without any installation.
+Visit [live demo](https://ts-verilog-simulator-frontend.vercel.app) to try Vivado-Make without any installation.
 
 ### Local Development
 

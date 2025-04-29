@@ -30,6 +30,7 @@ interface HoverInfo {
   signal: string;
   x: number;
   y: number;
+  signalsAtTime: { name: string; value: string; color: string }[];
 }
 
 interface Annotation {
@@ -73,12 +74,39 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   const [hoveredSignal, setHoveredSignal] = useState<string | null>(null);
 
   // Constants for styling
-  const SIGNAL_NAME_WIDTH = 200;
+  const SIGNAL_NAME_WIDTH = 150;
   const MIN_SIGNAL_HEIGHT = 48;
   const SIGNAL_PADDING = 8;
   const GROUP_HEADER_HEIGHT = 32;
   const TIME_MARKER_HEIGHT = 30;
   const TRANSITION_PADDING = 5;
+
+  // Modern color palette
+  const COLORS = {
+    background: {
+      primary: '#1A1B26',
+      secondary: '#24283B',
+      hover: 'rgba(187, 154, 247, 0.1)',
+      selected: 'rgba(187, 154, 247, 0.2)'
+    },
+    text: {
+      primary: '#A9B1D6',
+      secondary: '#565F89',
+      accent: '#BB9AF7'
+    },
+    signals: {
+      clock: '#7AA2F7',    // Blue
+      reset: '#F7768E',    // Red
+      input: '#9ECE6A',    // Green
+      output: '#E0AF68',   // Orange
+      bus: '#BB9AF7',      // Purple
+      default: '#7DCFFF'   // Light Blue
+    },
+    grid: {
+      minor: '#24283B',
+      major: '#2F3240'
+    }
+  };
 
   // Calculate dynamic font sizes based on signal height and zoom
   const getFontSizes = (signalHeight: number) => ({
@@ -164,22 +192,24 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
         // Determine signal group and properties
         let group = 'Other';
         let isBus = false;
-        let color = '#569CD6'; // Default color
+        let color = COLORS.signals.default;
         
         // Group signals based on naming conventions
         if (name.includes('clk') || name.includes('clock')) {
           group = 'Clock';
-          color = '#4EC9B0'; // Teal for clock
+          color = COLORS.signals.clock;
         } else if (name.includes('rst') || name.includes('reset')) {
           group = 'Reset';
-          color = '#CE9178'; // Orange for reset
+          color = COLORS.signals.reset;
         } else if (name.includes('serial_in')) {
           group = 'Input';
-          color = '#DCDCAA'; // Yellow for input
+          color = COLORS.signals.input;
         } else if (name.includes('q') && width > 1) {
           group = 'Output';
           isBus = true;
-          color = '#9CDCFE'; // Light blue for bus
+          color = COLORS.signals.bus;
+        } else {
+          color = COLORS.signals.default;
         }
         
         newSignals.push({
@@ -277,7 +307,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
           startTime: resetStart,
           endTime: resetEnd,
           y: 0, // Will be calculated during drawing
-          color: '#CE9178'
+          color: COLORS.signals.reset
         });
       }
     }
@@ -301,7 +331,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
             startTime: patternStart,
             endTime: serialSignal.values[i].time,
             y: 0, // Will be calculated during drawing
-            color: '#DCDCAA'
+            color: COLORS.signals.input
           });
           break;
         }
@@ -393,18 +423,18 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
     // Clear canvas with improved background
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, '#1E1E1E');
-    gradient.addColorStop(1, '#252526');
+    gradient.addColorStop(0, COLORS.background.primary);
+    gradient.addColorStop(1, COLORS.background.secondary);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
     // Draw time axis with improved styling
-    ctx.fillStyle = '#2D2D2D';
+    ctx.fillStyle = COLORS.background.secondary;
     ctx.fillRect(0, 0, width, TIME_MARKER_HEIGHT);
 
     // Draw grid with enhanced visibility
     // Minor grid lines
-    ctx.strokeStyle = '#2D2D2D';
+    ctx.strokeStyle = COLORS.grid.minor;
     ctx.lineWidth = 0.5;
     ctx.setLineDash([2, 2]);
 
@@ -419,7 +449,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     }
 
     // Major grid lines
-    ctx.strokeStyle = '#3D3D3D';
+    ctx.strokeStyle = COLORS.grid.major;
     ctx.lineWidth = 1;
     ctx.setLineDash([]);
 
@@ -453,16 +483,16 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
         (GROUP_HEADER_HEIGHT + (group.signals.length * (signalHeight + SIGNAL_PADDING)));
 
       // Group background
-      ctx.fillStyle = isHovered ? 'rgba(78, 201, 176, 0.1)' : 'rgba(45, 45, 45, 0.5)';
+      ctx.fillStyle = isHovered ? COLORS.background.hover : COLORS.background.secondary;
       ctx.fillRect(0, yOffset, width, groupHeight);
 
       // Group header
-      ctx.fillStyle = isHovered ? '#6ED7C1' : '#4EC9B0';
+      ctx.fillStyle = isHovered ? COLORS.text.primary : COLORS.text.secondary;
       ctx.font = `bold ${fontSizes.groupHeader}px monospace`;
       ctx.fillText(group.name, 10, yOffset + GROUP_HEADER_HEIGHT/2 + fontSizes.groupHeader/3);
 
       // Collapse/expand indicator with animation-like effect
-      ctx.fillStyle = isHovered ? '#FFFFFF' : '#CCCCCC';
+      ctx.fillStyle = isHovered ? COLORS.text.accent : '#CCCCCC';
       ctx.font = `bold ${fontSizes.groupHeader}px monospace`;
       const indicator = group.collapsed ? '▶' : '▼';
       ctx.fillText(indicator, SIGNAL_NAME_WIDTH - 30, yOffset + GROUP_HEADER_HEIGHT/2 + fontSizes.groupHeader/3);
@@ -476,12 +506,13 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
           // Signal row background
           if (isSignalHovered || isSignalSelected) {
-            ctx.fillStyle = isSignalSelected ? 'rgba(78, 201, 176, 0.2)' : 'rgba(78, 201, 176, 0.1)';
+            ctx.fillStyle = isSignalSelected ? COLORS.background.selected : COLORS.background.hover;
             ctx.fillRect(0, yOffset, width, signalHeight);
           }
 
           // Signal name with improved styling
-          ctx.fillStyle = isSignalSelected ? '#4EC9B0' : (isSignalHovered ? '#6ED7C1' : '#CCCCCC');
+          ctx.fillStyle = isSignalSelected ? COLORS.text.accent : 
+            (isSignalHovered ? COLORS.text.primary : COLORS.text.secondary);
           ctx.font = `${fontSizes.signalName}px monospace`;
           ctx.fillText(signal.name, 20, yOffset + signalHeight/2 + fontSizes.signalName/3);
 
@@ -492,7 +523,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
             let lastValue = signal.values[0].value;
 
             // Use signal-specific color with enhanced visibility
-            ctx.strokeStyle = isSignalSelected ? '#4EC9B0' : (signal.color || '#569CD6');
+            ctx.strokeStyle = isSignalSelected ? signal.color || COLORS.signals.default : (signal.color || COLORS.signals.default);
             ctx.lineWidth = isSignalSelected ? 2.5 : 2;
 
             // Draw waveform based on signal type
@@ -558,7 +589,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
                   ctx.stroke();
 
                   // Reset stroke style
-                  ctx.strokeStyle = isSignalSelected ? '#4EC9B0' : (signal.color || '#569CD6');
+                  ctx.strokeStyle = isSignalSelected ? signal.color || COLORS.signals.default : (signal.color || COLORS.signals.default);
 
                   lastX = x;
                   lastY = newY;
@@ -728,47 +759,43 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!canvasRef.current || !containerRef.current) return;
-    
+    if (!canvasRef.current) return;
+
     const rect = canvasRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+
+    // Find the signal at the current position
+    const signalInfo = findSignalAtPosition(y, x);
     
-    // Find the signal and value at this position
-    const time = (x - SIGNAL_NAME_WIDTH + pan) / timeScale;
-    const signal = findSignalAtPosition(y, time);
-    
-    if (signal) {
+    if (signalInfo) {
+      const { name, value } = signalInfo;
+      const time = (x - SIGNAL_NAME_WIDTH + pan) / (timeScale * zoom);
+      
+      // Find all signals that change at this time
+      const signalsAtTime = signalGroups.flatMap(group => 
+        group.signals.filter(signal => {
+          const transitions = signal.values.filter(v => 
+            Math.abs(v.time - time) < 0.5
+          );
+          return transitions.length > 0;
+        }).map(signal => ({
+          name: signal.name,
+          value: signal.values.find(v => Math.abs(v.time - time) < 0.5)?.value || '',
+          color: signal.color || COLORS.signals.default
+        }))
+      );
+
       setHoverInfo({
         time,
-        value: signal.value,
-        signal: signal.name,
-        x: e.clientX,
-        y: e.clientY
+        value,
+        signal: name,
+        x,
+        y,
+        signalsAtTime
       });
     } else {
       setHoverInfo(null);
-    }
-    
-    // Check if hovering over a group header
-    let currentY = TIME_MARKER_HEIGHT;
-    const signalHeight = 40;
-    let foundHover = false;
-    
-    for (const group of signalGroups) {
-      if (y >= currentY && y < currentY + signalHeight) {
-        setHoveredGroup(group.name);
-        foundHover = true;
-        break;
-      }
-      currentY += signalHeight;
-      if (!group.collapsed) {
-        currentY += group.signals.length * signalHeight;
-      }
-    }
-    
-    if (!foundHover) {
-      setHoveredGroup(null);
     }
   };
 
@@ -853,18 +880,18 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
     // Clear canvas with improved background
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, '#1E1E1E');
-    gradient.addColorStop(1, '#252526');
+    gradient.addColorStop(0, COLORS.background.primary);
+    gradient.addColorStop(1, COLORS.background.secondary);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
     // Draw time axis with improved styling
-    ctx.fillStyle = '#2D2D2D';
+    ctx.fillStyle = COLORS.background.secondary;
     ctx.fillRect(0, 0, width, TIME_MARKER_HEIGHT);
 
     // Draw grid with enhanced visibility
     // Minor grid lines
-    ctx.strokeStyle = '#2D2D2D';
+    ctx.strokeStyle = COLORS.grid.minor;
     ctx.lineWidth = 0.5;
     ctx.setLineDash([2, 2]);
 
@@ -879,7 +906,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     }
 
     // Major grid lines
-    ctx.strokeStyle = '#3D3D3D';
+    ctx.strokeStyle = COLORS.grid.major;
     ctx.lineWidth = 1;
     ctx.setLineDash([]);
 
@@ -913,16 +940,16 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
         (GROUP_HEADER_HEIGHT + (group.signals.length * (signalHeight + SIGNAL_PADDING)));
 
       // Group background
-      ctx.fillStyle = isHovered ? 'rgba(78, 201, 176, 0.1)' : 'rgba(45, 45, 45, 0.5)';
+      ctx.fillStyle = isHovered ? COLORS.background.hover : COLORS.background.secondary;
       ctx.fillRect(0, yOffset, width, groupHeight);
 
       // Group header
-      ctx.fillStyle = isHovered ? '#6ED7C1' : '#4EC9B0';
+      ctx.fillStyle = isHovered ? COLORS.text.primary : COLORS.text.secondary;
       ctx.font = `bold ${fontSizes.groupHeader}px monospace`;
       ctx.fillText(group.name, 10, yOffset + GROUP_HEADER_HEIGHT/2 + fontSizes.groupHeader/3);
 
       // Collapse/expand indicator with animation-like effect
-      ctx.fillStyle = isHovered ? '#FFFFFF' : '#CCCCCC';
+      ctx.fillStyle = isHovered ? COLORS.text.accent : '#CCCCCC';
       ctx.font = `bold ${fontSizes.groupHeader}px monospace`;
       const indicator = group.collapsed ? '▶' : '▼';
       ctx.fillText(indicator, SIGNAL_NAME_WIDTH - 30, yOffset + GROUP_HEADER_HEIGHT/2 + fontSizes.groupHeader/3);
@@ -936,12 +963,13 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
           // Signal row background
           if (isSignalHovered || isSignalSelected) {
-            ctx.fillStyle = isSignalSelected ? 'rgba(78, 201, 176, 0.2)' : 'rgba(78, 201, 176, 0.1)';
+            ctx.fillStyle = isSignalSelected ? COLORS.background.selected : COLORS.background.hover;
             ctx.fillRect(0, yOffset, width, signalHeight);
           }
 
           // Signal name with improved styling
-          ctx.fillStyle = isSignalSelected ? '#4EC9B0' : (isSignalHovered ? '#6ED7C1' : '#CCCCCC');
+          ctx.fillStyle = isSignalSelected ? COLORS.text.accent : 
+            (isSignalHovered ? COLORS.text.primary : COLORS.text.secondary);
           ctx.font = `${fontSizes.signalName}px monospace`;
           ctx.fillText(signal.name, 20, yOffset + signalHeight/2 + fontSizes.signalName/3);
 
@@ -952,7 +980,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
             let lastValue = signal.values[0].value;
 
             // Use signal-specific color with enhanced visibility
-            ctx.strokeStyle = isSignalSelected ? '#4EC9B0' : (signal.color || '#569CD6');
+            ctx.strokeStyle = isSignalSelected ? signal.color || COLORS.signals.default : (signal.color || COLORS.signals.default);
             ctx.lineWidth = isSignalSelected ? 2.5 : 2;
 
             // Draw waveform based on signal type
@@ -1018,7 +1046,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
                   ctx.stroke();
 
                   // Reset stroke style
-                  ctx.strokeStyle = isSignalSelected ? '#4EC9B0' : (signal.color || '#569CD6');
+                  ctx.strokeStyle = isSignalSelected ? signal.color || COLORS.signals.default : (signal.color || COLORS.signals.default);
 
                   lastX = x;
                   lastY = newY;
@@ -1116,22 +1144,51 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   return (
     <div 
       ref={containerRef}
-      className="relative w-full h-full bg-[#1E1E1E] overflow-hidden"
+      className="relative w-full h-full overflow-hidden"
       onMouseMove={handleMouseMove}
-      onMouseLeave={() => {
-        setHoverInfo(null);
-        setHoveredGroup(null);
-        setHoveredSignal(null);
-      }}
+      onMouseLeave={() => setHoverInfo(null)}
     >
       <canvas
         ref={canvasRef}
-        className="w-full h-full"
+        className="absolute top-0 left-0"
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onClick={handleClick}
       />
+      
+      {/* Enhanced hover info display */}
+      {hoverInfo && (
+        <div 
+          className="absolute bg-[#1A1B26]/90 border border-[#24283B] rounded-lg shadow-lg p-3 text-sm"
+          style={{
+            left: Math.min(hoverInfo.x + 10, containerRef.current?.clientWidth || 0 - 200),
+            top: Math.min(hoverInfo.y + 10, containerRef.current?.clientHeight || 0 - 100),
+            maxWidth: '300px',
+            zIndex: 1000
+          }}
+        >
+          <div className="text-[#BB9AF7] font-mono mb-2">
+            Time: {hoverInfo.time.toFixed(2)}ns
+          </div>
+          <div className="space-y-1">
+            {hoverInfo.signalsAtTime.map((signal, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <div 
+                  className="w-3 h-3 rounded-full" 
+                  style={{ backgroundColor: signal.color }}
+                />
+                <span className="text-[#A9B1D6] font-mono">{signal.name}:</span>
+                <span className="text-[#7DCFFF] font-mono">
+                  {signal.value.startsWith('b') ? 
+                    `${parseInt(signal.value.slice(1), 2).toString(16).toUpperCase()}h` : 
+                    signal.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 });
