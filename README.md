@@ -26,8 +26,6 @@ Vivado-Make is a modern, web-based alternative to Vivado for Verilog simulation.
 - **Custom Testbench Generation**: AI-assisted testbench creation
 - **Performance Optimization**: Improved simulation performance for complex designs
 - **Export Options**: Export waveforms and simulation results in various formats
-- **Integration with GitHub**: Direct integration with GitHub repositories
-- **Mobile Support**: Optimized experience for mobile devices
 
 ## Getting Started
 

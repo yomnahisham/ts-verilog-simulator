@@ -70,6 +70,23 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   const [showControls, setShowControls] = useState(false);
   const [initialZoomDone, setInitialZoomDone] = useState(false);
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
+  const [hoveredSignal, setHoveredSignal] = useState<string | null>(null);
+
+  // Constants for styling
+  const SIGNAL_NAME_WIDTH = 200;
+  const MIN_SIGNAL_HEIGHT = 48;
+  const SIGNAL_PADDING = 8;
+  const GROUP_HEADER_HEIGHT = 32;
+  const TIME_MARKER_HEIGHT = 30;
+  const TRANSITION_PADDING = 5;
+
+  // Calculate dynamic font sizes based on signal height and zoom
+  const getFontSizes = (signalHeight: number) => ({
+    groupHeader: Math.max(14, Math.min(18, signalHeight * 0.4)),
+    signalName: Math.max(12, Math.min(16, signalHeight * 0.3)),
+    signalValue: Math.max(10, Math.min(14, signalHeight * 0.25)),
+    timeMarker: Math.max(10, Math.min(14, TIME_MARKER_HEIGHT * 0.4))
+  });
 
   // Expose control methods via ref
   useImperativeHandle(ref, () => ({
@@ -351,6 +368,10 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Enable anti-aliasing
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
     // Set canvas dimensions
     const width = canvas.width;
     const height = canvas.height;
@@ -360,203 +381,212 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
       return count + (group.collapsed ? 1 : group.signals.length);
     }, 0);
     
-    const signalHeight = Math.max(40, height / (visibleSignals + 1));
+    // Calculate dynamic signal height with minimum and padding
+    const availableHeight = height - TIME_MARKER_HEIGHT;
+    const signalHeight = Math.max(
+      MIN_SIGNAL_HEIGHT,
+      (availableHeight - (visibleSignals * SIGNAL_PADDING)) / visibleSignals
+    );
 
-    // Clear canvas with Vivado-like dark background
-    ctx.fillStyle = '#1E1E1E';
+    // Get dynamic font sizes
+    const fontSizes = getFontSizes(signalHeight);
+
+    // Clear canvas with improved background
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#1E1E1E');
+    gradient.addColorStop(1, '#252526');
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
-    // Draw grid with Vivado-like colors
-    // Draw minor grid lines (lighter)
+    // Draw time axis with improved styling
+    ctx.fillStyle = '#2D2D2D';
+    ctx.fillRect(0, 0, width, TIME_MARKER_HEIGHT);
+
+    // Draw grid with enhanced visibility
+    // Minor grid lines
     ctx.strokeStyle = '#2D2D2D';
     ctx.lineWidth = 0.5;
+    ctx.setLineDash([2, 2]);
 
-    // Draw minor vertical grid lines (every 1ns)
     for (let t = 0; t <= maxTime; t += 1) {
-      const x = 200 + (t * timeScale) - pan;
-      if (x >= 200 && x <= width) {
+      const x = SIGNAL_NAME_WIDTH + (t * timeScale * zoom) - pan;
+      if (x >= SIGNAL_NAME_WIDTH && x <= width) {
         ctx.beginPath();
-        ctx.moveTo(x, 0);
+        ctx.moveTo(x, TIME_MARKER_HEIGHT);
         ctx.lineTo(x, height);
         ctx.stroke();
       }
     }
 
-    // Draw major vertical grid lines (every 10ns)
+    // Major grid lines
     ctx.strokeStyle = '#3D3D3D';
     ctx.lineWidth = 1;
+    ctx.setLineDash([]);
 
     for (let t = 0; t <= maxTime; t += 10) {
-      const x = 200 + (t * timeScale) - pan;
-      if (x >= 200 && x <= width) {
+      const x = SIGNAL_NAME_WIDTH + (t * timeScale * zoom) - pan;
+      if (x >= SIGNAL_NAME_WIDTH && x <= width) {
+        // Vertical grid line
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, height);
         ctx.stroke();
-        
-        // Draw time marker
+
+        // Time marker with improved visibility
         ctx.fillStyle = '#808080';
-        ctx.font = '12px monospace';
-        ctx.fillText(`${t}ns`, x - 25, 20);
+        ctx.font = `${fontSizes.timeMarker}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${t}ns`, x, TIME_MARKER_HEIGHT - 8);
       }
     }
 
+    // Reset text alignment
+    ctx.textAlign = 'left';
+
     // Draw signals and groups
-    let yOffset = 40;
+    let yOffset = TIME_MARKER_HEIGHT;
     
     signalGroups.forEach(group => {
-      // Draw group header with hover effect
+      // Draw group background
       const isHovered = group.name === hoveredGroup;
+      const groupHeight = group.collapsed ? GROUP_HEADER_HEIGHT : 
+        (GROUP_HEADER_HEIGHT + (group.signals.length * (signalHeight + SIGNAL_PADDING)));
+
+      // Group background
+      ctx.fillStyle = isHovered ? 'rgba(78, 201, 176, 0.1)' : 'rgba(45, 45, 45, 0.5)';
+      ctx.fillRect(0, yOffset, width, groupHeight);
+
+      // Group header
       ctx.fillStyle = isHovered ? '#6ED7C1' : '#4EC9B0';
-      ctx.font = 'bold 14px monospace';
-      ctx.fillText(group.name, 10, yOffset);
-      
-      // Draw more prominent collapse/expand indicator
+      ctx.font = `bold ${fontSizes.groupHeader}px monospace`;
+      ctx.fillText(group.name, 10, yOffset + GROUP_HEADER_HEIGHT/2 + fontSizes.groupHeader/3);
+
+      // Collapse/expand indicator with animation-like effect
       ctx.fillStyle = isHovered ? '#FFFFFF' : '#CCCCCC';
-      ctx.font = 'bold 16px monospace';
-      ctx.fillText(group.collapsed ? '▶' : '▼', 150, yOffset);
-      
-      // Draw group header background when hovered
-      if (isHovered) {
-        ctx.fillStyle = 'rgba(78, 201, 176, 0.1)';
-        ctx.fillRect(5, yOffset - 15, 160, signalHeight);
-      }
-      
-      yOffset += signalHeight;
+      ctx.font = `bold ${fontSizes.groupHeader}px monospace`;
+      const indicator = group.collapsed ? '▶' : '▼';
+      ctx.fillText(indicator, SIGNAL_NAME_WIDTH - 30, yOffset + GROUP_HEADER_HEIGHT/2 + fontSizes.groupHeader/3);
+
+      yOffset += GROUP_HEADER_HEIGHT;
       
       if (!group.collapsed) {
-        // Draw signals in this group
         group.signals.forEach(signal => {
-          // Draw signal name with Vivado-like style
-          ctx.fillStyle = selectedSignal === signal.id ? '#4EC9B0' : '#CCCCCC';
-          ctx.font = '12px monospace';
-          ctx.fillText(signal.name, 20, yOffset + 10);
-          
-          // Draw waveform
+          const isSignalHovered = hoveredSignal === signal.id;
+          const isSignalSelected = selectedSignal === signal.id;
+
+          // Signal row background
+          if (isSignalHovered || isSignalSelected) {
+            ctx.fillStyle = isSignalSelected ? 'rgba(78, 201, 176, 0.2)' : 'rgba(78, 201, 176, 0.1)';
+            ctx.fillRect(0, yOffset, width, signalHeight);
+          }
+
+          // Signal name with improved styling
+          ctx.fillStyle = isSignalSelected ? '#4EC9B0' : (isSignalHovered ? '#6ED7C1' : '#CCCCCC');
+          ctx.font = `${fontSizes.signalName}px monospace`;
+          ctx.fillText(signal.name, 20, yOffset + signalHeight/2 + fontSizes.signalName/3);
+
+          // Draw waveform with enhanced styling
           if (signal.values.length > 0) {
-            let lastX = 200;
-            let lastY = yOffset;
+            let lastX = SIGNAL_NAME_WIDTH;
+            let lastY = yOffset + signalHeight/2;
             let lastValue = signal.values[0].value;
-            
-            // Use signal-specific color
-            ctx.strokeStyle = selectedSignal === signal.id ? '#4EC9B0' : (signal.color || '#569CD6');
-            ctx.lineWidth = 2;
-            
-            // For bus signals, draw as a single waveform with hex value
+
+            // Use signal-specific color with enhanced visibility
+            ctx.strokeStyle = isSignalSelected ? '#4EC9B0' : (signal.color || '#569CD6');
+            ctx.lineWidth = isSignalSelected ? 2.5 : 2;
+
+            // Draw waveform based on signal type
             if (signal.isBus && signal.width > 1) {
-              // Collect all transitions
-              const transitions: { time: number; value: string; hexValue: string }[] = [];
-              
-              for (let i = 0; i < signal.values.length; i++) {
-                const { time, value } = signal.values[i];
-                // Convert binary to hex
-                const hexValue = parseInt(value, 2).toString(16).toUpperCase();
-                transitions.push({ time, value, hexValue });
-              }
-              
-              // Draw bus waveform
-              for (let i = 0; i < transitions.length; i++) {
-                const { time, value, hexValue } = transitions[i];
-                const x = 200 + (time * timeScale) - pan;
+              // Enhanced bus rendering
+              signal.values.forEach((transition, i) => {
+                const x = SIGNAL_NAME_WIDTH + (transition.time * timeScale * zoom) - pan;
                 
-                if (x >= 200 && x <= width) {
-                  // Draw horizontal line from last position
+                if (x >= SIGNAL_NAME_WIDTH && x <= width) {
+                  // Draw horizontal line
                   ctx.beginPath();
                   ctx.moveTo(lastX, lastY);
                   ctx.lineTo(x, lastY);
                   ctx.stroke();
-                  
-                  // Draw vertical transition line
-                  const newY = yOffset + (value.includes('1') ? -signalHeight/2 : signalHeight/2);
+
+                  // Draw transition
+                  const newY = yOffset + signalHeight/2 + (transition.value.includes('1') ? -signalHeight/4 : signalHeight/4);
                   ctx.beginPath();
                   ctx.moveTo(x, lastY);
                   ctx.lineTo(x, newY);
                   ctx.stroke();
-                  
-                  // Draw value at transition points
-                  if (value !== lastValue) {
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.font = '10px monospace';
-                    ctx.fillText(`${value} (${hexValue}h)`, x + 5, yOffset - 5);
-                    lastValue = value;
+
+                  // Draw bus value if there's enough space
+                  if (i < signal.values.length - 1) {
+                    const nextX = SIGNAL_NAME_WIDTH + (signal.values[i + 1].time * timeScale * zoom) - pan;
+                    if (nextX - x > 60) { // Only draw if there's enough space
+                      const hexValue = parseInt(transition.value, 2).toString(16).toUpperCase();
+                      ctx.fillStyle = '#FFFFFF';
+                      ctx.font = `${fontSizes.signalValue}px monospace`;
+                      ctx.fillText(`${hexValue}h`, x + TRANSITION_PADDING, yOffset + signalHeight/4);
+                    }
                   }
-                  
+
                   lastX = x;
                   lastY = newY;
                 }
-              }
-              
-              // Draw final value line
-              if (lastX < width) {
-                ctx.beginPath();
-                ctx.moveTo(lastX, lastY);
-                ctx.lineTo(width, lastY);
-                ctx.stroke();
-              }
+              });
             } else {
-              // Draw regular signal waveform
-              for (let i = 0; i < signal.values.length; i++) {
-                const { time, value } = signal.values[i];
-                const x = 200 + (time * timeScale) - pan;
+              // Enhanced single-bit signal rendering
+              signal.values.forEach((transition, i) => {
+                const x = SIGNAL_NAME_WIDTH + (transition.time * timeScale * zoom) - pan;
                 
-                if (x >= 200 && x <= width) {
-                  // Draw horizontal line from last position
+                if (x >= SIGNAL_NAME_WIDTH && x <= width) {
+                  // Draw horizontal line
                   ctx.beginPath();
                   ctx.moveTo(lastX, lastY);
                   ctx.lineTo(x, lastY);
                   ctx.stroke();
+
+                  // Draw transition with enhanced edge coloring
+                  const newY = yOffset + signalHeight/2 + (transition.value === '1' ? -signalHeight/3 : signalHeight/3);
                   
-                  // Draw vertical transition line with color based on edge direction
-                  const newY = yOffset + (value === '1' ? -signalHeight/2 : signalHeight/2);
-                  
-                  // Color based on edge direction
-                  if (lastValue === '0' && value === '1') {
-                    ctx.strokeStyle = '#4CAF50'; // Green for rising edge
-                  } else if (lastValue === '1' && value === '0') {
-                    ctx.strokeStyle = '#F44336'; // Red for falling edge
-                  } else {
-                    ctx.strokeStyle = selectedSignal === signal.id ? '#4EC9B0' : (signal.color || '#569CD6');
+                  // Color transitions based on edge type
+                  if (lastValue === '0' && transition.value === '1') {
+                    ctx.strokeStyle = '#4CAF50'; // Rising edge
+                  } else if (lastValue === '1' && transition.value === '0') {
+                    ctx.strokeStyle = '#F44336'; // Falling edge
                   }
                   
                   ctx.beginPath();
                   ctx.moveTo(x, lastY);
                   ctx.lineTo(x, newY);
                   ctx.stroke();
-                  
-                  // Draw value at transition points
-                  if (value !== lastValue) {
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.font = '10px monospace';
-                    ctx.fillText(value, x + 5, yOffset - 5);
-                    lastValue = value;
-                  }
-                  
+
+                  // Reset stroke style
+                  ctx.strokeStyle = isSignalSelected ? '#4EC9B0' : (signal.color || '#569CD6');
+
                   lastX = x;
                   lastY = newY;
+                  lastValue = transition.value;
                 }
-              }
-              
-              // Draw final value line
-              if (lastX < width) {
-                ctx.beginPath();
-                ctx.moveTo(lastX, lastY);
-                ctx.lineTo(width, lastY);
-                ctx.stroke();
-              }
+              });
+            }
+
+            // Draw final value line
+            if (lastX < width) {
+              ctx.beginPath();
+              ctx.moveTo(lastX, lastY);
+              ctx.lineTo(width, lastY);
+              ctx.stroke();
             }
           }
-          
-          yOffset += signalHeight;
+
+          yOffset += signalHeight + SIGNAL_PADDING;
         });
       }
     });
 
     // Draw annotations
     annotations.forEach(annotation => {
-      const startX = 200 + (annotation.startTime * timeScale) - pan;
-      const endX = 200 + (annotation.endTime * timeScale) - pan;
+      const startX = SIGNAL_NAME_WIDTH + (annotation.startTime * timeScale * zoom) - pan;
+      const endX = SIGNAL_NAME_WIDTH + (annotation.endTime * timeScale * zoom) - pan;
       
-      if (endX >= 200 && startX <= width) {
+      if (endX >= SIGNAL_NAME_WIDTH && startX <= width) {
         // Find the y-position for this annotation
         let annotationY = 0;
         
@@ -564,12 +594,12 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
         if (annotation.text.includes('RESET')) {
           const resetGroup = signalGroups.find(g => g.name === 'Reset');
           if (resetGroup) {
-            annotationY = 40 + (signalHeight / 2);
+            annotationY = TIME_MARKER_HEIGHT + (signalHeight / 2);
           }
         } else if (annotation.text.includes('Pattern')) {
           const inputGroup = signalGroups.find(g => g.name === 'Input');
           if (inputGroup) {
-            annotationY = 40 + signalHeight + (signalHeight / 2);
+            annotationY = TIME_MARKER_HEIGHT + signalHeight + (signalHeight / 2);
           }
         }
         
@@ -584,47 +614,44 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
         
         // Draw annotation text
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '12px monospace';
+        ctx.font = `${fontSizes.timeMarker}px monospace`;
         ctx.fillText(annotation.text, startX + 5, annotationY + 5);
       }
     });
 
-    // Draw hover indicator with Vivado-like style
+    // Draw hover indicator with enhanced styling
     if (hoverInfo) {
-      const { time, value, signal, x } = hoverInfo;
-      const hoverX = 200 + (time * timeScale) - pan;
+      const { time, x, y } = hoverInfo;
+      const hoverX = SIGNAL_NAME_WIDTH + (time * timeScale * zoom) - pan;
+
+      // Vertical time indicator
+      ctx.strokeStyle = 'rgba(78, 201, 176, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(hoverX, TIME_MARKER_HEIGHT);
+      ctx.lineTo(hoverX, height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Time tooltip
+      ctx.fillStyle = '#4EC9B0';
+      ctx.font = `${fontSizes.timeMarker}px monospace`;
+      const timeText = `${time}ns`;
+      const timeMetrics = ctx.measureText(timeText);
+      const tooltipPadding = 5;
+      const tooltipWidth = timeMetrics.width + 2 * tooltipPadding;
+      const tooltipHeight = fontSizes.timeMarker + 2 * tooltipPadding;
+      const tooltipX = Math.min(width - tooltipWidth, Math.max(SIGNAL_NAME_WIDTH, hoverX - tooltipWidth/2));
       
-      if (hoverX >= 200 && hoverX <= width) {
-        // Draw vertical line
-        ctx.strokeStyle = '#FF0000';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 5]);
-        
-        ctx.beginPath();
-        ctx.moveTo(hoverX, 0);
-        ctx.lineTo(hoverX, height);
-        ctx.stroke();
-        
-        ctx.setLineDash([]);
-        
-        // Draw hover info box with Vivado-like style
-        ctx.fillStyle = 'rgba(45, 45, 45, 0.9)';
-        ctx.fillRect(hoverX + 5, 10, 150, 60);
-        
-        // Draw border
-        ctx.strokeStyle = '#4EC9B0';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(hoverX + 5, 10, 150, 60);
-        
-        // Draw text
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '12px monospace';
-        ctx.fillText(`Signal: ${signal}`, hoverX + 10, 30);
-        ctx.fillText(`Value: ${value}`, hoverX + 10, 50);
-        ctx.fillText(`Time: ${time}ns`, hoverX + 10, 70);
-      }
+      ctx.fillStyle = 'rgba(45, 45, 45, 0.9)';
+      ctx.fillRect(tooltipX, TIME_MARKER_HEIGHT - tooltipHeight - 5, tooltipWidth, tooltipHeight);
+      ctx.fillStyle = '#4EC9B0';
+      ctx.textAlign = 'center';
+      ctx.fillText(timeText, tooltipX + tooltipWidth/2, TIME_MARKER_HEIGHT - tooltipPadding - 5);
+      ctx.textAlign = 'left';
     }
-  }, [signals, signalGroups, maxTime, timeScale, pan, selectedSignal, hoverInfo, zoom, annotations, hoveredGroup]);
+  }, [signals, signalGroups, maxTime, timeScale, pan, selectedSignal, hoverInfo, zoom, annotations, hoveredGroup, hoveredSignal]);
 
   // Handle mouse events
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -636,7 +663,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     const mouseX = e.clientX - rect.left;
     
     // Calculate zoom center point in time coordinates
-    const timeAtMouse = (mouseX - 200 + pan) / timeScale;
+    const timeAtMouse = (mouseX - SIGNAL_NAME_WIDTH + pan) / timeScale;
     
     // Adjust zoom
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
@@ -663,7 +690,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   };
 
   const findSignalAtPosition = (y: number, time: number): { name: string; value: string } | null => {
-    let currentY = 40; // Start after the top margin
+    let currentY = TIME_MARKER_HEIGHT; // Start after the top margin
     const signalHeight = 40; // Height of each signal row
     
     for (const group of signalGroups) {
@@ -708,7 +735,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     const y = e.clientY - rect.top;
     
     // Find the signal and value at this position
-    const time = (x - 200 + pan) / timeScale;
+    const time = (x - SIGNAL_NAME_WIDTH + pan) / timeScale;
     const signal = findSignalAtPosition(y, time);
     
     if (signal) {
@@ -724,7 +751,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     }
     
     // Check if hovering over a group header
-    let currentY = 40;
+    let currentY = TIME_MARKER_HEIGHT;
     const signalHeight = 40;
     let foundHover = false;
     
@@ -754,7 +781,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     const x = e.clientX - rect.left;
     
     // Check if a group header was clicked
-    let currentY = 40;
+    let currentY = TIME_MARKER_HEIGHT;
     const signalHeight = 40;
     
     for (let i = 0; i < signalGroups.length; i++) {
@@ -776,7 +803,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     }
     
     // If not a group header, check for signal clicks
-    currentY = 40;
+    currentY = TIME_MARKER_HEIGHT;
     
     for (const group of signalGroups) {
       currentY += signalHeight; // Group header
@@ -801,212 +828,225 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Enable anti-aliasing
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
     // Set canvas dimensions
     const width = canvas.width;
     const height = canvas.height;
-    
+
     // Calculate total visible signals (accounting for collapsed groups)
     const visibleSignals = signalGroups.reduce((count, group) => {
       return count + (group.collapsed ? 1 : group.signals.length);
     }, 0);
-    
-    const signalHeight = Math.max(40, height / (visibleSignals + 1));
 
-    // Clear canvas with Vivado-like dark background
-    ctx.fillStyle = '#1E1E1E';
+    // Calculate dynamic signal height with minimum and padding
+    const availableHeight = height - TIME_MARKER_HEIGHT;
+    const signalHeight = Math.max(
+      MIN_SIGNAL_HEIGHT,
+      (availableHeight - (visibleSignals * SIGNAL_PADDING)) / visibleSignals
+    );
+
+    // Get dynamic font sizes
+    const fontSizes = getFontSizes(signalHeight);
+
+    // Clear canvas with improved background
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#1E1E1E');
+    gradient.addColorStop(1, '#252526');
+    ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
 
-    // Draw grid with Vivado-like colors
-    // Draw minor grid lines (lighter)
+    // Draw time axis with improved styling
+    ctx.fillStyle = '#2D2D2D';
+    ctx.fillRect(0, 0, width, TIME_MARKER_HEIGHT);
+
+    // Draw grid with enhanced visibility
+    // Minor grid lines
     ctx.strokeStyle = '#2D2D2D';
     ctx.lineWidth = 0.5;
+    ctx.setLineDash([2, 2]);
 
-    // Draw minor vertical grid lines (every 1ns)
     for (let t = 0; t <= maxTime; t += 1) {
-      const x = 200 + (t * timeScale) - pan;
-      if (x >= 200 && x <= width) {
+      const x = SIGNAL_NAME_WIDTH + (t * timeScale * zoom) - pan;
+      if (x >= SIGNAL_NAME_WIDTH && x <= width) {
         ctx.beginPath();
-        ctx.moveTo(x, 0);
+        ctx.moveTo(x, TIME_MARKER_HEIGHT);
         ctx.lineTo(x, height);
         ctx.stroke();
       }
     }
 
-    // Draw major vertical grid lines (every 10ns)
+    // Major grid lines
     ctx.strokeStyle = '#3D3D3D';
     ctx.lineWidth = 1;
+    ctx.setLineDash([]);
 
     for (let t = 0; t <= maxTime; t += 10) {
-      const x = 200 + (t * timeScale) - pan;
-      if (x >= 200 && x <= width) {
+      const x = SIGNAL_NAME_WIDTH + (t * timeScale * zoom) - pan;
+      if (x >= SIGNAL_NAME_WIDTH && x <= width) {
+        // Vertical grid line
         ctx.beginPath();
         ctx.moveTo(x, 0);
         ctx.lineTo(x, height);
         ctx.stroke();
-        
-        // Draw time marker
+
+        // Time marker with improved visibility
         ctx.fillStyle = '#808080';
-        ctx.font = '12px monospace';
-        ctx.fillText(`${t}ns`, x - 25, 20);
+        ctx.font = `${fontSizes.timeMarker}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${t}ns`, x, TIME_MARKER_HEIGHT - 8);
       }
     }
 
+    // Reset text alignment
+    ctx.textAlign = 'left';
+
     // Draw signals and groups
-    let yOffset = 40;
-    
+    let yOffset = TIME_MARKER_HEIGHT;
+
     signalGroups.forEach(group => {
-      // Draw group header with hover effect
+      // Draw group background
       const isHovered = group.name === hoveredGroup;
+      const groupHeight = group.collapsed ? GROUP_HEADER_HEIGHT : 
+        (GROUP_HEADER_HEIGHT + (group.signals.length * (signalHeight + SIGNAL_PADDING)));
+
+      // Group background
+      ctx.fillStyle = isHovered ? 'rgba(78, 201, 176, 0.1)' : 'rgba(45, 45, 45, 0.5)';
+      ctx.fillRect(0, yOffset, width, groupHeight);
+
+      // Group header
       ctx.fillStyle = isHovered ? '#6ED7C1' : '#4EC9B0';
-      ctx.font = 'bold 14px monospace';
-      ctx.fillText(group.name, 10, yOffset);
-      
-      // Draw more prominent collapse/expand indicator
+      ctx.font = `bold ${fontSizes.groupHeader}px monospace`;
+      ctx.fillText(group.name, 10, yOffset + GROUP_HEADER_HEIGHT/2 + fontSizes.groupHeader/3);
+
+      // Collapse/expand indicator with animation-like effect
       ctx.fillStyle = isHovered ? '#FFFFFF' : '#CCCCCC';
-      ctx.font = 'bold 16px monospace';
-      ctx.fillText(group.collapsed ? '▶' : '▼', 150, yOffset);
-      
-      // Draw group header background when hovered
-      if (isHovered) {
-        ctx.fillStyle = 'rgba(78, 201, 176, 0.1)';
-        ctx.fillRect(5, yOffset - 15, 160, signalHeight);
-      }
-      
-      yOffset += signalHeight;
-      
+      ctx.font = `bold ${fontSizes.groupHeader}px monospace`;
+      const indicator = group.collapsed ? '▶' : '▼';
+      ctx.fillText(indicator, SIGNAL_NAME_WIDTH - 30, yOffset + GROUP_HEADER_HEIGHT/2 + fontSizes.groupHeader/3);
+
+      yOffset += GROUP_HEADER_HEIGHT;
+
       if (!group.collapsed) {
-        // Draw signals in this group
         group.signals.forEach(signal => {
-          // Draw signal name with Vivado-like style
-          ctx.fillStyle = selectedSignal === signal.id ? '#4EC9B0' : '#CCCCCC';
-          ctx.font = '12px monospace';
-          ctx.fillText(signal.name, 20, yOffset + 10);
-          
-          // Draw waveform
+          const isSignalHovered = hoveredSignal === signal.id;
+          const isSignalSelected = selectedSignal === signal.id;
+
+          // Signal row background
+          if (isSignalHovered || isSignalSelected) {
+            ctx.fillStyle = isSignalSelected ? 'rgba(78, 201, 176, 0.2)' : 'rgba(78, 201, 176, 0.1)';
+            ctx.fillRect(0, yOffset, width, signalHeight);
+          }
+
+          // Signal name with improved styling
+          ctx.fillStyle = isSignalSelected ? '#4EC9B0' : (isSignalHovered ? '#6ED7C1' : '#CCCCCC');
+          ctx.font = `${fontSizes.signalName}px monospace`;
+          ctx.fillText(signal.name, 20, yOffset + signalHeight/2 + fontSizes.signalName/3);
+
+          // Draw waveform with enhanced styling
           if (signal.values.length > 0) {
-            let lastX = 200;
-            let lastY = yOffset;
+            let lastX = SIGNAL_NAME_WIDTH;
+            let lastY = yOffset + signalHeight/2;
             let lastValue = signal.values[0].value;
-            
-            // Use signal-specific color
-            ctx.strokeStyle = selectedSignal === signal.id ? '#4EC9B0' : (signal.color || '#569CD6');
-            ctx.lineWidth = 2;
-            
-            // For bus signals, draw as a single waveform with hex value
+
+            // Use signal-specific color with enhanced visibility
+            ctx.strokeStyle = isSignalSelected ? '#4EC9B0' : (signal.color || '#569CD6');
+            ctx.lineWidth = isSignalSelected ? 2.5 : 2;
+
+            // Draw waveform based on signal type
             if (signal.isBus && signal.width > 1) {
-              // Collect all transitions
-              const transitions: { time: number; value: string; hexValue: string }[] = [];
-              
-              for (let i = 0; i < signal.values.length; i++) {
-                const { time, value } = signal.values[i];
-                // Convert binary to hex
-                const hexValue = parseInt(value, 2).toString(16).toUpperCase();
-                transitions.push({ time, value, hexValue });
-              }
-              
-              // Draw bus waveform
-              for (let i = 0; i < transitions.length; i++) {
-                const { time, value, hexValue } = transitions[i];
-                const x = 200 + (time * timeScale) - pan;
+              // Enhanced bus rendering
+              signal.values.forEach((transition, i) => {
+                const x = SIGNAL_NAME_WIDTH + (transition.time * timeScale * zoom) - pan;
                 
-                if (x >= 200 && x <= width) {
-                  // Draw horizontal line from last position
+                if (x >= SIGNAL_NAME_WIDTH && x <= width) {
+                  // Draw horizontal line
                   ctx.beginPath();
                   ctx.moveTo(lastX, lastY);
                   ctx.lineTo(x, lastY);
                   ctx.stroke();
-                  
-                  // Draw vertical transition line
-                  const newY = yOffset + (value.includes('1') ? -signalHeight/2 : signalHeight/2);
+
+                  // Draw transition
+                  const newY = yOffset + signalHeight/2 + (transition.value.includes('1') ? -signalHeight/4 : signalHeight/4);
                   ctx.beginPath();
                   ctx.moveTo(x, lastY);
                   ctx.lineTo(x, newY);
                   ctx.stroke();
-                  
-                  // Draw value at transition points
-                  if (value !== lastValue) {
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.font = '10px monospace';
-                    ctx.fillText(`${value} (${hexValue}h)`, x + 5, yOffset - 5);
-                    lastValue = value;
+
+                  // Draw bus value if there's enough space
+                  if (i < signal.values.length - 1) {
+                    const nextX = SIGNAL_NAME_WIDTH + (signal.values[i + 1].time * timeScale * zoom) - pan;
+                    if (nextX - x > 60) { // Only draw if there's enough space
+                      const hexValue = parseInt(transition.value, 2).toString(16).toUpperCase();
+                      ctx.fillStyle = '#FFFFFF';
+                      ctx.font = `${fontSizes.signalValue}px monospace`;
+                      ctx.fillText(`${hexValue}h`, x + TRANSITION_PADDING, yOffset + signalHeight/4);
+                    }
                   }
-                  
+
                   lastX = x;
                   lastY = newY;
                 }
-              }
-              
-              // Draw final value line
-              if (lastX < width) {
-                ctx.beginPath();
-                ctx.moveTo(lastX, lastY);
-                ctx.lineTo(width, lastY);
-                ctx.stroke();
-              }
+              });
             } else {
-              // Draw regular signal waveform
-              for (let i = 0; i < signal.values.length; i++) {
-                const { time, value } = signal.values[i];
-                const x = 200 + (time * timeScale) - pan;
+              // Enhanced single-bit signal rendering
+              signal.values.forEach((transition, i) => {
+                const x = SIGNAL_NAME_WIDTH + (transition.time * timeScale * zoom) - pan;
                 
-                if (x >= 200 && x <= width) {
-                  // Draw horizontal line from last position
+                if (x >= SIGNAL_NAME_WIDTH && x <= width) {
+                  // Draw horizontal line
                   ctx.beginPath();
                   ctx.moveTo(lastX, lastY);
                   ctx.lineTo(x, lastY);
                   ctx.stroke();
+
+                  // Draw transition with enhanced edge coloring
+                  const newY = yOffset + signalHeight/2 + (transition.value === '1' ? -signalHeight/3 : signalHeight/3);
                   
-                  // Draw vertical transition line with color based on edge direction
-                  const newY = yOffset + (value === '1' ? -signalHeight/2 : signalHeight/2);
-                  
-                  // Color based on edge direction
-                  if (lastValue === '0' && value === '1') {
-                    ctx.strokeStyle = '#4CAF50'; // Green for rising edge
-                  } else if (lastValue === '1' && value === '0') {
-                    ctx.strokeStyle = '#F44336'; // Red for falling edge
-                  } else {
-                    ctx.strokeStyle = selectedSignal === signal.id ? '#4EC9B0' : (signal.color || '#569CD6');
+                  // Color transitions based on edge type
+                  if (lastValue === '0' && transition.value === '1') {
+                    ctx.strokeStyle = '#4CAF50'; // Rising edge
+                  } else if (lastValue === '1' && transition.value === '0') {
+                    ctx.strokeStyle = '#F44336'; // Falling edge
                   }
                   
                   ctx.beginPath();
                   ctx.moveTo(x, lastY);
                   ctx.lineTo(x, newY);
                   ctx.stroke();
-                  
-                  // Draw value at transition points
-                  if (value !== lastValue) {
-                    ctx.fillStyle = '#FFFFFF';
-                    ctx.font = '10px monospace';
-                    ctx.fillText(value, x + 5, yOffset - 5);
-                    lastValue = value;
-                  }
-                  
+
+                  // Reset stroke style
+                  ctx.strokeStyle = isSignalSelected ? '#4EC9B0' : (signal.color || '#569CD6');
+
                   lastX = x;
                   lastY = newY;
+                  lastValue = transition.value;
                 }
-              }
-              
-              // Draw final value line
-              if (lastX < width) {
-                ctx.beginPath();
-                ctx.moveTo(lastX, lastY);
-                ctx.lineTo(width, lastY);
-                ctx.stroke();
-              }
+              });
+            }
+
+            // Draw final value line
+            if (lastX < width) {
+              ctx.beginPath();
+              ctx.moveTo(lastX, lastY);
+              ctx.lineTo(width, lastY);
+              ctx.stroke();
             }
           }
-          
-          yOffset += signalHeight;
+
+          yOffset += signalHeight + SIGNAL_PADDING;
         });
       }
     });
 
     // Draw annotations
     annotations.forEach(annotation => {
-      const startX = 200 + (annotation.startTime * timeScale) - pan;
-      const endX = 200 + (annotation.endTime * timeScale) - pan;
+      const startX = SIGNAL_NAME_WIDTH + (annotation.startTime * timeScale * zoom) - pan;
+      const endX = SIGNAL_NAME_WIDTH + (annotation.endTime * timeScale * zoom) - pan;
       
-      if (endX >= 200 && startX <= width) {
+      if (endX >= SIGNAL_NAME_WIDTH && startX <= width) {
         // Find the y-position for this annotation
         let annotationY = 0;
         
@@ -1014,12 +1054,12 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
         if (annotation.text.includes('RESET')) {
           const resetGroup = signalGroups.find(g => g.name === 'Reset');
           if (resetGroup) {
-            annotationY = 40 + (signalHeight / 2);
+            annotationY = TIME_MARKER_HEIGHT + (signalHeight / 2);
           }
         } else if (annotation.text.includes('Pattern')) {
           const inputGroup = signalGroups.find(g => g.name === 'Input');
           if (inputGroup) {
-            annotationY = 40 + signalHeight + (signalHeight / 2);
+            annotationY = TIME_MARKER_HEIGHT + signalHeight + (signalHeight / 2);
           }
         }
         
@@ -1034,81 +1074,64 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
         
         // Draw annotation text
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '12px monospace';
+        ctx.font = `${fontSizes.timeMarker}px monospace`;
         ctx.fillText(annotation.text, startX + 5, annotationY + 5);
       }
     });
 
-    // Draw hover indicator with Vivado-like style
+    // Draw hover indicator with enhanced styling
     if (hoverInfo) {
-      const { time, value, signal, x } = hoverInfo;
-      const hoverX = 200 + (time * timeScale) - pan;
+      const { time, x, y } = hoverInfo;
+      const hoverX = SIGNAL_NAME_WIDTH + (time * timeScale * zoom) - pan;
+
+      // Vertical time indicator
+      ctx.strokeStyle = 'rgba(78, 201, 176, 0.5)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(hoverX, TIME_MARKER_HEIGHT);
+      ctx.lineTo(hoverX, height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Time tooltip
+      ctx.fillStyle = '#4EC9B0';
+      ctx.font = `${fontSizes.timeMarker}px monospace`;
+      const timeText = `${time}ns`;
+      const timeMetrics = ctx.measureText(timeText);
+      const tooltipPadding = 5;
+      const tooltipWidth = timeMetrics.width + 2 * tooltipPadding;
+      const tooltipHeight = fontSizes.timeMarker + 2 * tooltipPadding;
+      const tooltipX = Math.min(width - tooltipWidth, Math.max(SIGNAL_NAME_WIDTH, hoverX - tooltipWidth/2));
       
-      if (hoverX >= 200 && hoverX <= width) {
-        // Draw vertical line
-        ctx.strokeStyle = '#FF0000';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([5, 5]);
-        
-        ctx.beginPath();
-        ctx.moveTo(hoverX, 0);
-        ctx.lineTo(hoverX, height);
-        ctx.stroke();
-        
-        ctx.setLineDash([]);
-        
-        // Draw hover info box with Vivado-like style
-        ctx.fillStyle = 'rgba(45, 45, 45, 0.9)';
-        ctx.fillRect(hoverX + 5, 10, 150, 60);
-        
-        // Draw border
-        ctx.strokeStyle = '#4EC9B0';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(hoverX + 5, 10, 150, 60);
-        
-        // Draw text
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '12px monospace';
-        ctx.fillText(`Signal: ${signal}`, hoverX + 10, 30);
-        ctx.fillText(`Value: ${value}`, hoverX + 10, 50);
-        ctx.fillText(`Time: ${time}ns`, hoverX + 10, 70);
-      }
+      ctx.fillStyle = 'rgba(45, 45, 45, 0.9)';
+      ctx.fillRect(tooltipX, TIME_MARKER_HEIGHT - tooltipHeight - 5, tooltipWidth, tooltipHeight);
+      ctx.fillStyle = '#4EC9B0';
+      ctx.textAlign = 'center';
+      ctx.fillText(timeText, tooltipX + tooltipWidth/2, TIME_MARKER_HEIGHT - tooltipPadding - 5);
+      ctx.textAlign = 'left';
     }
   };
 
   return (
     <div 
       ref={containerRef}
-      className="relative w-full h-full bg-[#1E1E1E] overflow-auto"
+      className="relative w-full h-full bg-[#1E1E1E] overflow-hidden"
       onMouseMove={handleMouseMove}
-      onMouseLeave={() => setHoverInfo(null)}
+      onMouseLeave={() => {
+        setHoverInfo(null);
+        setHoveredGroup(null);
+        setHoveredSignal(null);
+      }}
     >
       <canvas
         ref={canvasRef}
-        className="absolute top-0 left-0"
+        className="w-full h-full"
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
-        onMouseMove={isDragging ? (e) => {
-          if (!isDragging) return;
-          const dx = e.clientX - dragStart.x;
-          setPan(Math.max(0, lastPan - dx));
-          drawWaveform();
-        } : undefined}
         onClick={handleClick}
       />
-      
-      {hoverInfo && (
-        <div
-          className="absolute bottom-0 left-0 right-0 bg-[#2D2D2D] text-white p-2 z-10 border-t border-[#3D3D3D]"
-        >
-          <div className="flex justify-between">
-            <div>Signal: {hoverInfo.signal}</div>
-            <div>Value: {hoverInfo.value}</div>
-            <div>Time: {hoverInfo.time.toFixed(2)}ns</div>
-          </div>
-        </div>
-      )}
     </div>
   );
 });
