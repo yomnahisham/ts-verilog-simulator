@@ -1,10 +1,8 @@
 # Vivado-Make: A Modern Web-Based Verilog Simulator
 
-![Vivado-Make Logo](https://via.placeholder.com/150x50?text=Vivado-Make)
-
 Vivado-Make is a modern, web-based alternative to Vivado for Verilog simulation. It provides a user-friendly interface for designing, simulating, and visualizing Verilog code without the need for expensive licenses or complex installations.
 
-## 🌟 Features
+## Features
 
 ### Current Features
 
@@ -31,7 +29,7 @@ Vivado-Make is a modern, web-based alternative to Vivado for Verilog simulation.
 - **Integration with GitHub**: Direct integration with GitHub repositories
 - **Mobile Support**: Optimized experience for mobile devices
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Online Demo
 
@@ -57,7 +55,7 @@ npm install
 npm run dev
 ```
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 - **Frontend**: Next.js, React, TypeScript, Tailwind CSS, Monaco Editor
 - **Backend**: FastAPI, Python, Icarus Verilog
@@ -65,7 +63,7 @@ npm run dev
 - **Simulation Engine**: Icarus Verilog (iverilog, vvp)
 - **Waveform Visualization**: Custom implementation
 
-## 📚 Usage Guide
+## Usage Guide
 
 1. **Create Your Design**: Write your Verilog design code in the editor
 2. **Create a Testbench**: Write a testbench to simulate your design
@@ -115,14 +113,14 @@ module example_tb;
 endmodule
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
 - `NEXT_PUBLIC_BACKEND_URL`: URL of the backend API (default: `http://localhost:8001`)
 - `CORS_ORIGINS`: Allowed origins for CORS (default: `http://localhost:3000,https://ts-verilog-simulator-frontend.vercel.app`)
 
-## 🚀 Deployment
+## Deployment
 
 ### Backend (Vercel)
 
@@ -138,21 +136,21 @@ cd frontend
 vercel
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Icarus Verilog](http://iverilog.icarus.com/) for the Verilog simulation engine
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/) for the code editor
 - [FastAPI](https://fastapi.tiangolo.com/) for the backend framework
 - [Next.js](https://nextjs.org/) for the frontend framework
 
-## 📞 Contact
+## Contact
 
 For questions or feedback, please open an issue on our [GitHub repository](https://github.com/yomnahisham/ts-verilog-simulator). 
