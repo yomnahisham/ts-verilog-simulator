@@ -5,6 +5,9 @@ import Editor, { Monaco, OnMount } from '@monaco-editor/react';
 import Split from 'react-split';
 import WaveformViewer from './WaveformViewer';
 
+// Add this near the top of the file, after imports
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
+
 // Default Verilog code for the module editor
 const defaultVerilogCode = `module example(
     input clk,
@@ -309,7 +312,7 @@ export default function VerilogEditor() {
   const handleSimulate = async () => {
     try {
       // Check if backend is available
-      const healthCheck = await fetch('http://localhost:8001/health');
+      const healthCheck = await fetch(`${API_BASE_URL}/health`);
       if (!healthCheck.ok) {
         throw new Error('Backend server is not responding');
       }
@@ -319,7 +322,7 @@ export default function VerilogEditor() {
       const testbenchCode = testbenchEditorRef.current?.getValue() || '';
 
       // Send simulation request
-      const response = await fetch('http://localhost:8001/api/v1/simulate', {
+      const response = await fetch(`${API_BASE_URL}/api/v1/simulate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

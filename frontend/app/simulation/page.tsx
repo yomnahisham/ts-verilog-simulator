@@ -13,7 +13,7 @@ interface File {
 }
 
 // Backend configuration
-const BACKEND_BASE_URL = 'http://localhost:8001';
+const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001';
 const BACKEND_API_URL = `${BACKEND_BASE_URL}/api/v1`;
 const USE_REAL_SIMULATION = true; // Flag to use real simulation instead of mock data
 
@@ -512,7 +512,7 @@ export default function SimulationPage() {
   // Function to check backend status
   const checkBackendStatus = async (): Promise<boolean> => {
     try {
-      const response = await fetch('http://localhost:8001/health', {
+      const response = await fetch(`${BACKEND_BASE_URL}/health`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -605,7 +605,7 @@ export default function SimulationPage() {
 
       try {
         // Send simulation request to backend
-        const response = await fetch('http://localhost:8001/api/v1/simulate', {
+        const response = await fetch(`${BACKEND_BASE_URL}/api/v1/simulate`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
