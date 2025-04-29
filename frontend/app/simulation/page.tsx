@@ -567,8 +567,17 @@ export default function SimulationPage() {
       }
 
       // Find files containing the selected modules
-      const moduleFile = files.find(file => file.content.includes(`module ${topModule}`));
-      const testbenchFile = files.find(file => file.content.includes(`module ${topTestbench}`));
+      const moduleFile = files.find(file => {
+        // Check for module declaration with or without parameters
+        const moduleRegex = new RegExp(`module\\s+${topModule}\\s*(?:#\\s*\\([^)]*\\))?\\s*(?:\([^)]*\))?\\s*;`);
+        return moduleRegex.test(file.content);
+      });
+      
+      const testbenchFile = files.find(file => {
+        // Check for module declaration with or without parameters
+        const moduleRegex = new RegExp(`module\\s+${topTestbench}\\s*(?:#\\s*\\([^)]*\\))?\\s*(?:\([^)]*\))?\\s*;`);
+        return moduleRegex.test(file.content);
+      });
 
       if (!moduleFile || !testbenchFile) {
         setSimulationOutput(`Error: Could not find files containing the selected modules. Please ensure the files containing modules "${topModule}" and "${topTestbench}" are open.`);
@@ -576,12 +585,13 @@ export default function SimulationPage() {
       }
 
       // Ensure testbench instantiates the correct module
-      const moduleInstRegex = new RegExp(`\\b${topModule}\\s+\\w+\\s*\\(|\\b${topModule}\\s*\\(|\\b${topModule}\\s+\\w+\\s*$`);
+      const moduleInstRegex = new RegExp(`\\b${topModule}\\s*(?:#\\s*\\([^)]*\\))?\\s+\\w+\\s*\\(|\\b${topModule}\\s*(?:#\\s*\\([^)]*\\))?\\s*\\(|\\b${topModule}\\s*(?:#\\s*\\([^)]*\\))?\\s+\\w+\\s*$`);
       if (!moduleInstRegex.test(testbenchFile.content)) {
         setSimulationOutput(`Error: Testbench does not instantiate the top module "${topModule}". Please ensure your testbench instantiates the correct module. Common instantiation formats:\n` +
           `1. ${topModule} instance_name ( ... );\n` +
           `2. ${topModule} ( ... );\n` +
-          `3. ${topModule} instance_name;`);
+          `3. ${topModule} instance_name;\n` +
+          `4. ${topModule} #(parameters) instance_name ( ... );`);
         return;
       }
 
