@@ -4,22 +4,32 @@ from fastapi.staticfiles import StaticFiles
 from .api import simulation
 import os
 from mangum import Mangum
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Get environment variables with defaults
+PORT = int(os.getenv("PORT", "8001"))
+HOST = os.getenv("HOST", "0.0.0.0")
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 app = FastAPI(
     title="Vivado-Make API",
     description="A modern web-based alternative to Vivado for Verilog simulation",
-    version="1.0.0"
+    version="1.0.0",
+    debug=DEBUG
 )
 
 # Get CORS origins from environment variable or use default
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://*.amplifyapp.com").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://*.amplifyapp.com,https://*.vercel.app").split(",")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Mount static files if directory exists
@@ -40,3 +50,8 @@ async def health_check():
 
 # Handler for AWS Lambda
 handler = Mangum(app)
+
+# For local development
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host=HOST, port=PORT, reload=DEBUG)
