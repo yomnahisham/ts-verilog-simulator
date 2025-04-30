@@ -153,7 +153,20 @@ async def root():
 @app.get("/health")
 async def health_check():
     logger.info("Health check endpoint called")
-    return {"status": "healthy"}
+    return JSONResponse(
+        content={
+            "status": "healthy",
+            "timestamp": time.time(),
+            "version": "1.0.0",
+            "environment": os.getenv("ENVIRONMENT", "production")
+        },
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type"
+        }
+    )
 
 @app.get("/test")
 async def test_endpoint():

@@ -165,43 +165,6 @@ export default function SimulationPage() {
   
   // Check backend status on component mount and periodically
   useEffect(() => {
-    const checkBackendStatus = async () => {
-      try {
-        console.log('Checking backend status at:', `${BACKEND_BASE_URL}/health`);
-        const response = await fetch(`${BACKEND_BASE_URL}/health`, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-          },
-        });
-        
-        console.log('Backend response:', {
-          status: response.status,
-          statusText: response.statusText,
-          ok: response.ok,
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log('Backend health data:', data);
-          setBackendStatus('online');
-          return true;
-        } else {
-          console.error('Backend returned non-OK status:', response.status);
-          setBackendStatus('offline');
-          return false;
-        }
-      } catch (error) {
-        console.error('Backend status check failed:', {
-          error,
-          message: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined,
-        });
-        setBackendStatus('offline');
-        return false;
-      }
-    };
-    
     // Check immediately
     checkBackendStatus();
     
@@ -210,6 +173,46 @@ export default function SimulationPage() {
     
     return () => clearInterval(intervalId);
   }, []);
+
+  // Function to check backend status
+  const checkBackendStatus = async (): Promise<boolean> => {
+    try {
+      console.log('Checking backend status at:', `${BACKEND_BASE_URL}/health`);
+      const response = await fetch(`${BACKEND_BASE_URL}/health`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
+        mode: 'cors',
+      });
+      
+      console.log('Backend response:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Backend health data:', data);
+        setBackendStatus('online');
+        return true;
+      } else {
+        console.error('Backend returned non-OK status:', response.status);
+        setBackendStatus('offline');
+        return false;
+      }
+    } catch (error) {
+      console.error('Backend status check failed:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      setBackendStatus('offline');
+      return false;
+    }
+  };
 
   // Scan for module declarations whenever files change
   useEffect(() => {
@@ -506,33 +509,6 @@ export default function SimulationPage() {
     if (editorModels['testbench']) {
       const model = editorModels['testbench'];
       model.setValue(content);
-    }
-  };
-
-  // Function to check backend status
-  const checkBackendStatus = async (): Promise<boolean> => {
-    try {
-      const response = await fetch(`${BACKEND_BASE_URL}/health`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Backend health data:', data);
-        setBackendStatus('online');
-        return true;
-      } else {
-        console.error('Backend returned non-OK status:', response.status);
-        setBackendStatus('offline');
-        return false;
-      }
-    } catch (error) {
-      console.error('Backend health check failed:', error);
-      setBackendStatus('offline');
-      return false;
     }
   };
 
