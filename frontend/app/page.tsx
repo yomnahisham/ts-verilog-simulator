@@ -1,114 +1,142 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+
+const formSchema = z.object({
+  verilog_code: z.string().min(1, 'Verilog code is required'),
+  testbench_code: z.string().min(1, 'Testbench code is required'),
+  top_module: z.string().min(1, 'Top module name is required'),
+  top_testbench: z.string().min(1, 'Top testbench name is required'),
+});
+
+type FormData = z.infer<typeof formSchema>;
 
 export default function Home() {
-  const router = useRouter();
-  const [loadingText, setLoadingText] = useState('');
-  const [dots, setDots] = useState('');
-  const [progress, setProgress] = useState(0);
-  const [showCircuit, setShowCircuit] = useState(false);
+  const [result, setResult] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-  useEffect(() => {
-    // Animate the loading text
-    const text = 'Verilog-Make';
-    let currentText = '';
-    let currentIndex = 0;
-    
-    const textInterval = setInterval(() => {
-      if (currentIndex < text.length) {
-        currentText += text[currentIndex];
-        setLoadingText(currentText);
-        currentIndex++;
-      } else {
-        clearInterval(textInterval);
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<FormData>({
+    resolver: zodResolver(formSchema),
+  });
+
+  const onSubmit = async (data: FormData) => {
+    setIsLoading(true);
+    setError('');
+    setResult('');
+
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8001/api/v1';
+      const response = await fetch(`${backendUrl}/simulate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Simulation failed');
       }
-    }, 100);
 
-    // Animate the dots
-    const dotsInterval = setInterval(() => {
-      setDots(prev => {
-        if (prev.length >= 3) return '';
-        return prev + '.';
-      });
-    }, 300);
-
-    // Animate the progress bar
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(progressInterval);
-          return 100;
-        }
-        return prev + 2;
-      });
-    }, 50);
-
-    // Show circuit animation after a delay
-    const circuitTimeout = setTimeout(() => {
-      setShowCircuit(true);
-    }, 1000);
-
-    // Redirect after animation completes
-    const redirectTimeout = setTimeout(() => {
-      router.push('/simulation');
-    }, 4000);
-
-    return () => {
-      clearInterval(textInterval);
-      clearInterval(dotsInterval);
-      clearInterval(progressInterval);
-      clearTimeout(circuitTimeout);
-      clearTimeout(redirectTimeout);
-    };
-  }, [router]);
+      const result = await response.json();
+      setResult(result.output);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-[#1e1e1e] text-white">
-      <div className="relative mb-8">
-        <h1 className="text-4xl font-bold text-blue-500">
-          {loadingText}
-          <span className="text-white">{dots}</span>
-        </h1>
-        
-        {showCircuit && (
-          <div className="absolute -bottom-12 left-0 right-0 flex justify-center">
-            <div className="w-64 h-16 relative">
-              {/* Circuit animation */}
-              <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 animate-pulse"></div>
-              <div className="absolute top-0 left-0 w-1 h-8 bg-blue-500 animate-pulse"></div>
-              <div className="absolute top-0 right-0 w-1 h-8 bg-blue-500 animate-pulse"></div>
-              <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500 animate-pulse"></div>
-              
-              {/* Circuit components */}
-              <div className="absolute top-0 left-1/4 w-8 h-8 border-2 border-blue-500 rounded-full animate-ping"></div>
-              <div className="absolute top-0 left-1/2 w-8 h-8 border-2 border-blue-500 rounded-full animate-ping" style={{ animationDelay: '0.5s' }}></div>
-              <div className="absolute top-0 left-3/4 w-8 h-8 border-2 border-blue-500 rounded-full animate-ping" style={{ animationDelay: '1s' }}></div>
-              
-              {/* Binary animation */}
-              <div className="absolute -top-6 left-0 right-0 text-xs text-blue-400 font-mono">
-                {Array.from({ length: 20 }).map((_, i) => (
-                  <span key={i} className="inline-block mx-1 animate-pulse" style={{ animationDelay: `${i * 0.1}s` }}>
-                    {Math.random() > 0.5 ? '1' : '0'}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+    <main className="min-h-screen p-8">
+      <h1 className="text-3xl font-bold mb-8">Verilog Simulator</h1>
       
-      <div className="w-64 h-2 bg-gray-700 rounded-full overflow-hidden">
-        <div 
-          className="h-full bg-blue-500 transition-all duration-300 ease-out"
-          style={{ width: `${progress}%` }}
-        ></div>
-      </div>
-      
-      <div className="mt-4 text-sm text-gray-400">
-        {progress < 100 ? 'Initializing Verilog environment...' : 'Ready to simulate!'}
-      </div>
-    </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div>
+          <label htmlFor="verilog_code" className="block mb-2">Verilog Code</label>
+          <textarea
+            id="verilog_code"
+            {...register('verilog_code')}
+            className="w-full p-2 border rounded"
+            rows={10}
+          />
+          {errors.verilog_code && (
+            <p className="text-red-500">{errors.verilog_code.message}</p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="testbench_code" className="block mb-2">Testbench Code</label>
+          <textarea
+            id="testbench_code"
+            {...register('testbench_code')}
+            className="w-full p-2 border rounded"
+            rows={10}
+          />
+          {errors.testbench_code && (
+            <p className="text-red-500">{errors.testbench_code.message}</p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="top_module" className="block mb-2">Top Module Name</label>
+          <input
+            id="top_module"
+            type="text"
+            {...register('top_module')}
+            className="w-full p-2 border rounded"
+          />
+          {errors.top_module && (
+            <p className="text-red-500">{errors.top_module.message}</p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="top_testbench" className="block mb-2">Top Testbench Name</label>
+          <input
+            id="top_testbench"
+            type="text"
+            {...register('top_testbench')}
+            className="w-full p-2 border rounded"
+          />
+          {errors.top_testbench && (
+            <p className="text-red-500">{errors.top_testbench.message}</p>
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
+        >
+          {isLoading ? 'Simulating...' : 'Run Simulation'}
+        </button>
+      </form>
+
+      {error && (
+        <div className="mt-8 p-4 bg-red-100 text-red-700 rounded">
+          <h2 className="font-bold">Error</h2>
+          <p>{error}</p>
+        </div>
+      )}
+
+      {result && (
+        <div className="mt-8">
+          <h2 className="text-xl font-bold mb-4">Simulation Results</h2>
+          <pre className="p-4 bg-gray-100 rounded overflow-auto">
+            {result}
+          </pre>
+        </div>
+      )}
+    </main>
   );
 } 

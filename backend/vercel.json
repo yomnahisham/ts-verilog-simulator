@@ -1,33 +1,17 @@
 {
   "version": 2,
-  "buildCommand": "chmod +x vercel-build.sh && ./vercel-build.sh",
-  "builds": [
-    {
-      "src": "app/main.py",
-      "use": "@vercel/python",
-      "config": {
-        "runtime": "python3.9",
-        "maxLambdaSize": "15mb"
-      }
+  "functions": {
+    "api/simulate.py": {
+      "runtime": "python3.11"
     }
-  ],
+  },
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "app/main.py",
-      "headers": {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "X-Requested-With, Content-Type, Accept"
-      }
-    },
-    {
-      "src": "/(.*)",
-      "dest": "app/main.py"
+      "src": "/api/v1/simulate",
+      "dest": "/api/simulate.py"
     }
   ],
   "env": {
-    "CORS_ORIGINS": "*"
-  },
-  "public": true
+    "CORS_ORIGINS": "https://verilog-simulator-frontend.vercel.app"
+  }
 } 

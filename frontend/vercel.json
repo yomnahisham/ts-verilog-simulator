@@ -5,28 +5,16 @@
     {
       "src": "package.json",
       "use": "@vercel/next"
-    },
-    {
-      "src": "app/api/main.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "15mb",
-        "runtime": "python3.11"
-      }
     }
   ],
   "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    },
     {
       "src": "/(.*)",
       "dest": "/$1"
     }
   ],
   "env": {
-    "NEXT_PUBLIC_BACKEND_URL": "/api",
+    "NEXT_PUBLIC_BACKEND_URL": "https://verilog-simulator-backend.vercel.app/api/v1",
     "NODE_ENV": "production"
   },
   "regions": ["iad1"],
