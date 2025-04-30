@@ -29,7 +29,7 @@ app = FastAPI(
 )
 
 # Get CORS origins from environment variable or use default
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://ts-verilog-simulator-frontend.vercel.app").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://ts-verilog-simulator-frontend-git-main-yomna-othmans-projects.vercel.app").split(",")
 logger.info(f"CORS_ORIGINS: {CORS_ORIGINS}")
 
 app.add_middleware(
@@ -38,6 +38,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Define models for the simulation API

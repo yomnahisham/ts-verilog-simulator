@@ -183,14 +183,17 @@ export default function SimulationPage() {
         headers: {
           'Accept': 'application/json',
           'Cache-Control': 'no-cache',
+          'Origin': window.location.origin
         },
-        mode: 'cors',
+        credentials: 'include',
+        mode: 'cors'
       });
       
       console.log('Backend response:', {
         status: response.status,
         statusText: response.statusText,
         ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
       });
       
       if (response.ok) {
