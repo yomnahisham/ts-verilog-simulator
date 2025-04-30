@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.DS_Store
+backend/venv
+backend/__pycache__
+backend/**/__pycache__
+frontend/.next
+frontend/out 
