@@ -1,23 +1,4 @@
 services:
-  # Frontend service
-  - type: web
-    name: verilog-make-frontend
-    env: node
-    buildCommand: |
-      cd frontend
-      rm -rf node_modules .next
-      npm install
-      npm install --save-dev typescript@latest @types/react@latest @types/node@latest
-      npm run build
-    startCommand: cd frontend && npm run start
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NEXT_PUBLIC_BACKEND_URL
-        value: https://verilog-make-backend.onrender.com
-      - key: PORT
-        value: 10000
-
   # Backend service
   - type: web
     name: verilog-make-backend
@@ -37,4 +18,4 @@ services:
       - key: PORT
         value: 10000
       - key: CORS_ORIGINS
-        value: https://verilog-make-frontend.onrender.com 
+        value: https://verilog-make-frontend.vercel.app 
