@@ -24,12 +24,10 @@ function mockSimulate(
   topTestbench: string
 ): SimulationResponse {
   // Simulate processing time
-  const output = `Mock simulation of ${topModule} with testbench ${topTestbench}\n`;
-  output += "Simulation completed successfully\n";
+  const output = `Mock simulation of ${topModule} with testbench ${topTestbench}\nSimulation completed successfully\n`;
   
   // Generate mock waveform data
-  const waveformData = `
-$date
+  const waveformData = `$date
     Date text. For example: June 26, 1989 10:05:41
 $end
 $version
@@ -47,50 +45,7 @@ $enddefinitions $end
 #0
 $dumpvars
 0!
-0"
-b00000000 #
-$end
-#100
-1!
-0"
-b00000001 #
-#200
-0!
-0"
-b00000010 #
-#300
-1!
-0"
-b00000011 #
-#400
-0!
-0"
-b00000100 #
-#500
-1!
-0"
-b00000101 #
-#600
-0!
-0"
-b00000110 #
-#700
-1!
-0"
-b00000111 #
-#800
-0!
-0"
-b00001000 #
-#900
-1!
-0"
-b00001001 #
-#1000
-0!
-0"
-b00001010 #
-`;
+0"`;
 
   return {
     success: true,
