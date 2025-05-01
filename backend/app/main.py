@@ -29,7 +29,7 @@ app = FastAPI(
 )
 
 # Get CORS origins from environment variable or use default
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://ts-verilog-simulator-frontend-git-main-yomna-othmans-projects.vercel.app").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://ts-verilog-simulator-frontend.vercel.app").split(",")
 logger.info(f"CORS_ORIGINS: {CORS_ORIGINS}")
 
 app.add_middleware(
@@ -163,9 +163,10 @@ async def health_check():
         },
         status_code=200,
         headers={
-            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Origin": "https://ts-verilog-simulator-frontend.vercel.app",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type"
+            "Access-Control-Allow-Headers": "Content-Type, Accept, Origin",
+            "Access-Control-Allow-Credentials": "true"
         }
     )
 
