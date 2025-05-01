@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import { Allotment } from 'allotment';
 
 interface WaveformViewerProps {
   vcdData: string;
@@ -13,8 +14,12 @@ interface Signal {
   width: number;
   group?: string;
   isBus?: boolean;
-  busBits?: string[];
+  expanded?: boolean;
+  busBits?: Signal[];
   color?: string;
+  parentBus?: string;
+  displayFormat?: 'binary' | 'decimal' | 'hex';
+  displayMode?: 'digital' | 'analog';
 }
 
 interface SignalGroup {
@@ -25,12 +30,14 @@ interface SignalGroup {
 }
 
 interface HoverInfo {
-  time: number;
-  value: string;
-  signal: string;
   x: number;
   y: number;
-  signalsAtTime: { name: string; value: string; color: string }[];
+  time: number;
+  signalsAtTime: Array<{
+    name: string;
+    value: string;
+    color: string;
+  }>;
 }
 
 interface Annotation {
@@ -52,9 +59,23 @@ export interface WaveformViewerRef {
   handleExpandAll: () => void;
 }
 
+// Constants for styling
+const WAVE_COLOR = '#00FF00';
+const GRID_COLOR = '#333';
+const TIME_AXIS_HEIGHT = 30;
+const HEADER_HEIGHT = 30;
+const SIGNAL_ROW_HEIGHT = 30;
+const TOP_MARGIN = 40;
+const SIGNAL_PANEL_BG = '#1E1E1E';
+const SIGNAL_PANEL_BORDER = '#3D3D3D';
+const SIGNAL_TEXT = '#D4D4D4';
+const SIGNAL_SELECTED_BG = '#2D2D2D';
+const SIGNAL_SELECTED_TEXT = '#FFFFFF';
+const TIME_MARKER_HEIGHT = 30;
+
 const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcdData }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const waveformAreaRef = useRef<HTMLDivElement>(null);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [signalGroups, setSignalGroups] = useState<SignalGroup[]>([]);
   const [maxTime, setMaxTime] = useState(0);
@@ -66,19 +87,27 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   const [visibleTimeRange, setVisibleTimeRange] = useState({ start: 0, end: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [lastPan, setLastPan] = useState(0);
+  const [dragOffset, setDragOffset] = useState(0);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [showControls, setShowControls] = useState(false);
   const [initialZoomDone, setInitialZoomDone] = useState(false);
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
   const [hoveredSignal, setHoveredSignal] = useState<string | null>(null);
+  const [waveformHoverY, setWaveformHoverY] = useState<number | null>(null);
+  const [showGrid, setShowGrid] = useState(true);
+  const [showValues, setShowValues] = useState(true);
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const [expandedSignals, setExpandedSignals] = useState<Set<string>>(new Set());
+  const [signalDisplayFormats, setSignalDisplayFormats] = useState<Record<string, 'binary' | 'decimal' | 'hex'>>({});
+  const [defaultDisplayFormat, setDefaultDisplayFormat] = useState<'binary' | 'decimal' | 'hex'>('binary');
+  const [signalDisplayModes, setSignalDisplayModes] = useState<Record<string, 'digital' | 'analog'>>({});
+  const [defaultDisplayMode, setDefaultDisplayMode] = useState<'digital' | 'analog'>('digital');
 
   // Constants for styling
   const SIGNAL_NAME_WIDTH = 150;
   const MIN_SIGNAL_HEIGHT = 48;
   const SIGNAL_PADDING = 8;
   const GROUP_HEADER_HEIGHT = 32;
-  const TIME_MARKER_HEIGHT = 30;
   const TRANSITION_PADDING = 5;
 
   // Modern color palette - VS Code Monokai theme
@@ -345,7 +374,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   useEffect(() => {
     const updateCanvasSize = () => {
       const canvas = canvasRef.current;
-      const container = containerRef.current;
+      const container = waveformAreaRef.current;
       if (!canvas || !container) return;
 
       const { width, height } = container.getBoundingClientRect();
@@ -361,7 +390,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
   // Update timeScale when maxTime or container width changes
   useEffect(() => {
-    const container = containerRef.current;
+    const container = waveformAreaRef.current;
     if (!container || maxTime === 0) return;
 
     const { width } = container.getBoundingClientRect();
@@ -713,7 +742,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setIsDragging(true);
     setDragStart({ x: e.clientX, y: e.clientY });
-    setLastPan(pan);
+    setDragOffset(pan);
   };
 
   const handleMouseUp = () => {
@@ -758,45 +787,39 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     return null;
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Find the signal at the current position
-    const signalInfo = findSignalAtPosition(y, x);
-    
-    if (signalInfo) {
-      const { name, value } = signalInfo;
-      const time = (x - SIGNAL_NAME_WIDTH + pan) / (timeScale * zoom);
-      
-      // Find all signals that change at this time
-      const signalsAtTime = signalGroups.flatMap(group => 
-        group.signals.filter(signal => {
-          const transitions = signal.values.filter(v => 
-            Math.abs(v.time - time) < 0.5
-          );
-          return transitions.length > 0;
-        }).map(signal => ({
-          name: signal.name,
-          value: signal.values.find(v => Math.abs(v.time - time) < 0.5)?.value || '',
-          color: signal.color || COLORS.signals.default
-        }))
-      );
-
-      setHoverInfo({
-        time,
-        value,
-        signal: name,
-        x,
-        y,
-        signalsAtTime
-      });
-    } else {
-      setHoverInfo(null);
+    if (isDragging) {
+      const dx = x - dragStart.x;
+      setDragOffset(dragOffset - dx / timeScale);
+      return;
     }
+
+    // Calculate time based on x position
+    const time = (x - dragOffset) / timeScale;
+    if (time < 0) return;
+
+    // Find signals at this time
+    const signalsAtTime = signals.map(signal => {
+      const value = getSignalValueAtTime(signal, time);
+      return {
+        name: signal.name,
+        value: formatSignalValue(value, signal.width, signal.name),
+        color: signal.color || WAVE_COLOR
+      };
+    });
+
+    setHoverInfo({
+      x,
+      y,
+      time,
+      signalsAtTime
+    });
   };
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1141,54 +1164,370 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     }
   };
 
-  return (
-    <div 
-      ref={containerRef}
-      className="relative w-full h-full overflow-hidden"
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => setHoverInfo(null)}
-    >
-      <canvas
-        ref={canvasRef}
-        className="absolute top-0 left-0"
-        onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onClick={handleClick}
-      />
+  // Helper function to convert binary string to decimal
+  const binaryToDecimal = (binary: string): string => {
+    if (binary.includes('x') || binary.includes('z')) {
+      return binary;
+    }
+    const decimal = parseInt(binary, 2);
+    return isNaN(decimal) ? binary : decimal.toString();
+  };
+
+  // Helper function to convert binary string to hexadecimal
+  const binaryToHex = (binary: string): string => {
+    if (binary.includes('x') || binary.includes('z')) {
+      return binary;
+    }
+    const decimal = parseInt(binary, 2);
+    if (isNaN(decimal)) return binary;
+    return decimal.toString(16).toUpperCase();
+  };
+
+  // Helper: Format signal value for display based on format preference
+  const formatSignalValue = (value: string, width: number, signalName?: string, isBitSignal: boolean = false): string => {
+    // Handle special values
+    if (value === 'x' || value === 'z') return value;
+
+    // Handle real numbers
+    if (value.startsWith('r')) {
+      return value.substring(1);
+    }
+
+    // Handle strings
+    if (value.startsWith('s')) {
+      return value.substring(1);
+    }
+
+    // For single-bit values or bit signals, return as is
+    if (width === 1 || isBitSignal) return value;
+
+    // For multi-bit values, use the specified format
+    const format = signalName && signalDisplayFormats[signalName]
+      ? signalDisplayFormats[signalName]
+      : defaultDisplayFormat;
+
+    switch (format) {
+      case 'binary':
+        return value.padStart(width, '0');
+      case 'hex':
+        return binaryToHex(value);
+      case 'decimal':
+      default:
+        return binaryToDecimal(value);
+    }
+  };
+
+  // Add a cache for generated bit signals
+  const bitSignalCache = useRef<Record<string, Signal[]>>({});
+
+  const generateBitSignals = (signal: Signal): Signal[] => {
+    // Check if we already have generated bit signals for this bus
+    const cacheKey = `${signal.id}_${signal.width}`;
+    if (bitSignalCache.current[cacheKey]) {
+      return bitSignalCache.current[cacheKey];
+    }
+
+    // Create an array to hold all bit signals
+    const bits: Signal[] = [];
+
+    // For each bit position in the bus (from MSB to LSB)
+    for (let i = signal.width - 1; i >= 0; i--) {
+      // Create a new signal for this bit
+      const bitSignal: Signal = {
+        id: `${signal.id}_bit${i}`,
+        name: `${signal.name}[${i}]`,
+        width: 1,
+        values: [],
+        color: WAVE_COLOR,
+        parentBus: signal.name
+      };
+
+      // For each time point in the parent bus, extract this bit's value
+      for (let j = 0; j < signal.values.length; j++) {
+        const { time, value } = signal.values[j];
+
+        // Convert the bus value to binary and ensure it has the correct width
+        let binaryValue = value;
+
+        // Handle special cases
+        if (value.startsWith('r') || value.startsWith('s')) {
+          // For real or string values, use '0' for all bits
+          binaryValue = '0'.repeat(signal.width);
+        } else if (value.includes('x')) {
+          // For x values, use 'x' for all bits
+          binaryValue = 'x'.repeat(signal.width);
+        } else if (value.includes('z')) {
+          // For z values, use 'z' for all bits
+          binaryValue = 'z'.repeat(signal.width);
+        } else {
+          // For binary values, pad to ensure correct width
+          binaryValue = value.padStart(signal.width, '0');
+        }
+
+        // Extract this specific bit's value
+        // For bit[7] (MSB), we want binaryValue[0]
+        // For bit[0] (LSB), we want binaryValue[7]
+        const bitIndex = signal.width - 1 - i;
+        const bitValue = bitIndex < binaryValue.length ? binaryValue[bitIndex] : '0';
+
+        // Always add a value change at each time point from the parent bus
+        bitSignal.values.push({ time, value: bitValue });
+      }
+
+      // If no values were added (empty bus), add a default '0' at time 0
+      if (bitSignal.values.length === 0) {
+        bitSignal.values.push({ time: 0, value: '0' });
+      }
+
+      // Add this bit signal to the array
+      bits.push(bitSignal);
+    }
+
+    // Cache the generated bit signals
+    bitSignalCache.current[cacheKey] = bits;
+
+    return bits;
+  };
+
+  // Add debug logging to getSignalValueAtTime
+  const getSignalValueAtTime = (signal: Signal, time: number) => {
+    if (!signal.values.length) {
+      return signal.width > 1 ? '0'.repeat(signal.width) : '0';
+    }
+    
+    // Find the last value that is less than or equal to the target time
+    let left = 0;
+    let right = signal.values.length - 1;
+    let result = signal.values[0].value;
+    
+    while (left <= right) {
+      const mid = Math.floor((left + right) / 2);
+      const currentTime = signal.values[mid].time;
       
-      {/* Enhanced hover info display with VS Code styling */}
-      {hoverInfo && (
-        <div 
-          className="absolute bg-[#1E1E1E]/90 border border-[#3D3D3D] rounded-lg shadow-lg p-3 text-sm"
-          style={{
-            left: Math.min(hoverInfo.x + 10, containerRef.current?.clientWidth || 0 - 200),
-            top: Math.min(hoverInfo.y + 10, containerRef.current?.clientHeight || 0 - 100),
-            maxWidth: '300px',
-            zIndex: 1000
-          }}
-        >
-          <div className="text-[#569CD6] font-mono mb-2">
-            Time: {hoverInfo.time.toFixed(2)}ns
-          </div>
-          <div className="space-y-1">
-            {hoverInfo.signalsAtTime.map((signal, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <div 
-                  className="w-3 h-3 rounded-full" 
-                  style={{ backgroundColor: signal.color }}
-                />
-                <span className="text-[#D4D4D4] font-mono">{signal.name}:</span>
-                <span className="text-[#9CDCFE] font-mono">
-                  {signal.value.startsWith('b') ? 
-                    `${parseInt(signal.value.slice(1), 2).toString(16).toUpperCase()}h` : 
-                    signal.value}
-                </span>
+      if (currentTime <= time) {
+        result = signal.values[mid].value;
+        left = mid + 1;
+      } else {
+        right = mid - 1;
+      }
+    }
+    
+    return result;
+  };
+
+  return (
+    <div className="w-full h-full flex flex-col">
+      <Allotment className="h-full" defaultSizes={[20, 80]}>
+        <Allotment.Pane>
+          <div style={{
+            background: SIGNAL_PANEL_BG,
+            borderRight: `2px solid ${SIGNAL_PANEL_BORDER}`,
+            color: SIGNAL_TEXT,
+            fontFamily: 'monospace',
+            fontSize: 12,
+            overflowY: 'auto',
+            height: '100%'
+          }}>
+            {/* Add spacing div to match timestamp area */}
+            <div style={{ height: TIME_AXIS_HEIGHT }} />
+
+            {/* Name|Value header */}
+            <div style={{
+              display: 'flex',
+              fontWeight: 'bold',
+              borderBottom: `2px solid ${SIGNAL_PANEL_BORDER}`,
+              height: HEADER_HEIGHT,
+              backgroundColor: SIGNAL_PANEL_BG
+            }}>
+              <div style={{ width: '75%', paddingLeft: 8 }}>Name</div>
+              <div style={{ width: '25%' }}>Value</div>
+            </div>
+
+            {signals.map((signal, index) => (
+              <div
+                key={`signal-${index}-${signal.id}`}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  background: selectedSignal === signal.name ? SIGNAL_SELECTED_BG : (index % 2 === 0 ? '#181818' : '#222'),
+                  color: selectedSignal === signal.name ? SIGNAL_SELECTED_TEXT : SIGNAL_TEXT,
+                  minHeight: SIGNAL_ROW_HEIGHT,
+                  cursor: 'pointer',
+                  borderBottom: `1px solid ${SIGNAL_PANEL_BORDER}`
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    height: SIGNAL_ROW_HEIGHT,
+                    lineHeight: `${SIGNAL_ROW_HEIGHT}px`,
+                  }}
+                  onClick={() => setSelectedSignal(selectedSignal === signal.name ? null : signal.name)}
+                >
+                  <div style={{ width: '75%', paddingLeft: 8, display: 'flex', alignItems: 'center' }}>
+                    {signal.width > 1 && (
+                      <span
+                        style={{
+                          marginRight: 5,
+                          cursor: 'pointer',
+                          width: 12,
+                          height: 12,
+                          display: 'inline-flex',
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          fontSize: 14,
+                          fontWeight: 'bold',
+                          color: '#00FF00'
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedSignals(prev => {
+                            const newSet = new Set(prev);
+                            if (newSet.has(signal.name)) {
+                              newSet.delete(signal.name);
+                            } else {
+                              newSet.add(signal.name);
+                            }
+                            return newSet;
+                          });
+                        }}
+                      >
+                        {expandedSignals.has(signal.name) ? '−' : '+'}
+                      </span>
+                    )}
+                    {signal.name} {signal.width > 1 ? `[${signal.width-1}:0]` : ''}
+                  </div>
+                  <div style={{ width: '25%', paddingLeft: 4 }}>
+                    {(() => {
+                      const currentValue = hoverInfo
+                        ? getSignalValueAtTime(signal, hoverInfo.time)
+                        : getSignalValueAtTime(signal, 0);
+                      return formatSignalValue(currentValue, signal.width, signal.name);
+                    })()}
+                  </div>
+                </div>
+
+                {/* Display mode selection for multi-bit signals */}
+                {signal.width > 1 && selectedSignal === signal.name && (
+                  <div style={{
+                    padding: '4px 8px',
+                    fontSize: 11,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4
+                  }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <div>Display:</div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {['digital', 'analog'].map(mode => (
+                          <div
+                            key={mode}
+                            style={{
+                              cursor: 'pointer',
+                              padding: '0 4px',
+                              backgroundColor: (signal.displayMode || defaultDisplayMode) === mode ? '#2986f5' : 'transparent',
+                              borderRadius: 2
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSignalDisplayModes(prev => ({
+                                ...prev,
+                                [signal.name]: mode as 'digital' | 'analog'
+                              }));
+                              setSignals(prev => prev.map(s =>
+                                s.name === signal.name
+                                  ? { ...s, displayMode: mode as 'digital' | 'analog' }
+                                  : s
+                              ));
+                            }}
+                          >
+                            {mode}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Show expanded bits if bus is expanded */}
+                {signal.width > 1 && expandedSignals.has(signal.name) && (
+                  <div style={{ paddingLeft: 16 }}>
+                    {generateBitSignals(signal).map((bitSignal, bitIndex) => (
+                      <div
+                        key={`bit-${bitIndex}`}
+                        style={{
+                          display: 'flex',
+                          height: SIGNAL_ROW_HEIGHT * 0.9,
+                          lineHeight: `${SIGNAL_ROW_HEIGHT * 0.9}px`,
+                          fontSize: 11,
+                          color: '#00FF00',
+                          borderTop: '1px dotted #333',
+                          background: bitIndex % 2 === 0 ? '#181818' : '#222'
+                        }}
+                      >
+                        <div style={{ width: '75%', paddingLeft: 8, display: 'flex', alignItems: 'center' }}>
+                          <span style={{ width: 12 }}></span> {/* Spacer for alignment */}
+                          {bitSignal.name}
+                        </div>
+                        <div style={{ width: '25%', paddingLeft: 4 }}>
+                          {(() => {
+                            const currentValue = hoverInfo
+                              ? getSignalValueAtTime(bitSignal, hoverInfo.time)
+                              : getSignalValueAtTime(bitSignal, 0);
+                            return formatSignalValue(currentValue, bitSignal.width, bitSignal.name, true);
+                          })()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
-        </div>
-      )}
+        </Allotment.Pane>
+
+        <Allotment.Pane>
+          <div
+            ref={waveformAreaRef}
+            className="relative w-full h-full bg-black"
+          >
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 block w-full h-full"
+              onWheel={handleWheel}
+              onMouseDown={handleMouseDown}
+              onMouseUp={handleMouseUp}
+              onClick={handleClick}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={() => setHoverInfo(null)}
+            />
+            {/* Alignment guides */}
+            <div style={{
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: '100%',
+              height: '100%',
+              pointerEvents: 'none'
+            }}>
+              {signals.map((_, index) => (
+                <div
+                  key={`guide-${index}`}
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: `${TOP_MARGIN + (index * SIGNAL_ROW_HEIGHT)}px`,
+                    width: '100%',
+                    height: '1px',
+                    background: GRID_COLOR,
+                    opacity: 0.1
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </Allotment.Pane>
+      </Allotment>
     </div>
   );
 });
