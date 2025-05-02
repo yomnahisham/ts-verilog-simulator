@@ -9,10 +9,9 @@ services:
       source .venv/bin/activate
       pip install -r requirements.txt
       mkdir -p static
-      # Download and install iverilog
-      wget https://github.com/steveicarus/iverilog/releases/download/v12_0/iverilog-12_0-x86_64-linux.tgz
-      tar xzf iverilog-12_0-x86_64-linux.tgz
-      export PATH=$PATH:$(pwd)/iverilog-12_0-x86_64-linux/bin
+      # Install iverilog using apt-get
+      apt-get update
+      apt-get install -y iverilog
     startCommand: cd backend && source .venv/bin/activate && PYTHONPATH=$PYTHONPATH:. uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
