@@ -23,7 +23,7 @@ ENV PORT=10000
 EXPOSE $PORT
 
 # Verify iverilog installation
-RUN iverilog --version
+RUN which iverilog && iverilog -v
 
 # Run the application
 CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "10000"] 
