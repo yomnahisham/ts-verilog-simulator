@@ -1004,7 +1004,8 @@ export default function SimulationPage() {
           </div>
           <div>
             <span className="mr-4">Status: {backendStatus === 'online' ? 'Connected' : 'Disconnected'}</span>
-            <span>Time: {currentTime}</span>
+            <span className="mr-4">Time: {currentTime}</span>
+            <span>© 2025 Yomna Hisham</span>
           </div>
         </div>
       </div>
