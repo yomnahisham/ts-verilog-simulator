@@ -16,42 +16,37 @@ type SimulationResponse = {
   waveform_data: string;
 };
 
-// Mock simulation function
-function mockSimulate(
+// Backend configuration
+const BACKEND_BASE_URL = 'https://ts-verilog-simulator-backend.onrender.com';
+const BACKEND_API_URL = `${BACKEND_BASE_URL}/api/v1`;
+
+// Real simulation function that calls the backend
+async function simulateVerilog(
   verilogCode: string,
   testbenchCode: string,
   topModule: string,
   topTestbench: string
-): SimulationResponse {
-  // Simulate processing time
-  const output = `Mock simulation of ${topModule} with testbench ${topTestbench}\nSimulation completed successfully\n`;
-  
-  // Generate mock waveform data
-  const waveformData = `$date
-    Date text. For example: June 26, 1989 10:05:41
-$end
-$version
-    VCD generator version info
-$end
-$timescale
-    1s
-$end
-$scope module top $end
-$var wire 1 ! clk $end
-$var wire 1 " rst $end
-$var wire 8 # data $end
-$upscope $end
-$enddefinitions $end
-#0
-$dumpvars
-0!
-0"`;
+): Promise<SimulationResponse> {
+  const response = await fetch(`${BACKEND_API_URL}/simulate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify({
+      verilog_code: verilogCode,
+      testbench_code: testbenchCode,
+      top_module: topModule,
+      top_testbench: topTestbench
+    })
+  });
 
-  return {
-    success: true,
-    output,
-    waveform_data: waveformData
-  };
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(errorData.detail || `Simulation failed: ${response.statusText}`);
+  }
+
+  return await response.json();
 }
 
 export async function POST(request: Request) {
@@ -60,8 +55,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validatedData = SimulationRequestSchema.parse(body);
 
-    // Run the simulation
-    const result = mockSimulate(
+    // Run the simulation using the backend
+    const result = await simulateVerilog(
       validatedData.verilog_code,
       validatedData.testbench_code,
       validatedData.top_module,
@@ -78,7 +73,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
     );
   }

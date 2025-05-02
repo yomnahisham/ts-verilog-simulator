@@ -7,6 +7,7 @@ import logging
 import sys
 import json
 import time
+from app.services.verilog_simulator import VerilogSimulator
 
 # Configure logging to output to stdout/stderr for Vercel
 logging.basicConfig(
@@ -67,85 +68,6 @@ class SimulationResponse(BaseModel):
     output: str
     waveform_data: str
 
-# Mock simulation function
-def mock_simulate(verilog_code, testbench_code, top_module, top_testbench):
-    """Mock simulation function that doesn't rely on external tools"""
-    logger.info(f"Mock simulating {top_module} with testbench {top_testbench}")
-    
-    # Simulate processing time
-    time.sleep(0.5)
-    
-    # Generate mock output
-    output = f"Mock simulation of {top_module} with testbench {top_testbench}\n"
-    output += "Simulation completed successfully\n"
-    
-    # Generate mock waveform data
-    waveform_data = """
-$date
-    Date text. For example: June 26, 1989 10:05:41
-$end
-$version
-    VCD generator version info
-$end
-$timescale
-    1s
-$end
-$scope module top $end
-$var wire 1 ! clk $end
-$var wire 1 " rst $end
-$var wire 8 # data $end
-$upscope $end
-$enddefinitions $end
-#0
-$dumpvars
-0!
-0"
-b00000000 #
-$end
-#100
-1!
-0"
-b00000001 #
-#200
-0!
-0"
-b00000010 #
-#300
-1!
-0"
-b00000011 #
-#400
-0!
-0"
-b00000100 #
-#500
-1!
-0"
-b00000101 #
-#600
-0!
-0"
-b00000110 #
-#700
-1!
-0"
-b00000111 #
-#800
-0!
-0"
-b00001000 #
-#900
-1!
-0"
-b00001001 #
-#1000
-0!
-0"
-b00001010 #
-"""
-    
-    return True, output, waveform_data
-
 @app.get("/")
 async def root():
     logger.info("Root endpoint called")
@@ -183,10 +105,14 @@ async def test_endpoint():
 
 @app.post("/api/v1/simulate", response_model=SimulationResponse)
 async def simulate_verilog(request: SimulationRequest):
-    """Mock simulation endpoint that doesn't rely on external tools"""
+    """Real simulation endpoint using Icarus Verilog"""
     logger.info(f"Simulation request received for {request.top_module}")
     try:
-        success, output, waveform_data = mock_simulate(
+        # Create a simulator instance
+        simulator = VerilogSimulator()
+        
+        # Run the simulation
+        success, output, waveform_data = await simulator.compile_and_simulate(
             request.verilog_code,
             request.testbench_code,
             request.top_module,
