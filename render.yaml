@@ -4,6 +4,7 @@ services:
     name: verilog-make-backend
     env: python
     buildCommand: |
+      apt-get update && apt-get install -y iverilog
       cd backend
       python -m venv .venv
       source .venv/bin/activate
