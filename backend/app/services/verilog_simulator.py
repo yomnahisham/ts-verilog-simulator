@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 class VerilogSimulator:
     def __init__(self):
+        # Create temp directory with proper permissions
         self.temp_dir = tempfile.mkdtemp()
+        os.chmod(self.temp_dir, 0o777)  # Ensure write permissions
         logger.debug(f"Created temporary directory: {self.temp_dir}")
         self.simulation_timeout = 10  # Reduced to 10 seconds to match Vercel's timeout
         self.check_required_tools()
