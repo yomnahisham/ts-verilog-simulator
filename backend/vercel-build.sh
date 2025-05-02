@@ -8,11 +8,10 @@ echo "Current directory: $(pwd)"
 echo "Directory contents: $(ls -la)"
 echo "Python version: $(python --version)"
 
-# Install iverilog from pre-compiled binary
-echo "Installing iverilog..."
-wget https://github.com/steveicarus/iverilog/releases/download/v12_0/iverilog-12_0-x86_64-linux.tgz
-tar xzf iverilog-12_0-x86_64-linux.tgz
-export PATH=$PATH:$(pwd)/iverilog-12_0-x86_64-linux/bin
+# Install system dependencies
+echo "Installing system dependencies..."
+sudo apt-get update
+sudo apt-get install -y iverilog
 
 # Verify installation
 echo "Verifying iverilog installation..."
