@@ -1,28 +1,29 @@
-FROM node:18-slim
+FROM python:3.11-slim
 
-# Install Python
-RUN apt-get update && apt-get install -y python3 python3-pip python3-venv && rm -rf /var/lib/apt/lists/*
+# Install system dependencies including iverilog
+RUN apt-get update && apt-get install -y \
+    iverilog \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json ./
-
-# Install Node.js dependencies
-RUN npm install
+# Copy requirements first to leverage Docker cache
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application
-COPY . .
+COPY backend/ ./backend/
 
-# Install Python dependencies
-RUN cd backend && python3 -m venv venv && . venv/bin/activate && pip install -r requirements.txt
-
-# Build the frontend
-RUN npm run build
+# Set environment variables
+ENV PYTHONPATH=/app
+ENV PORT=10000
 
 # Expose the port
-EXPOSE 3000
+EXPOSE $PORT
 
-# Start the application
-CMD ["npm", "start"] 
+# Verify iverilog installation
+RUN iverilog --version
+
+# Run the application
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "10000"] 

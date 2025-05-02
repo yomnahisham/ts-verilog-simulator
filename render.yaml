@@ -2,17 +2,8 @@ services:
   # Backend service
   - type: web
     name: verilog-make-backend
-    env: python
-    buildCommand: |
-      cd backend
-      ./vercel-build.sh
-    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    env: docker
+    dockerfilePath: ./Dockerfile
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
-      - key: PYTHONPATH
-        value: backend
-      - key: PORT
-        value: 10000
       - key: CORS_ORIGINS
         value: https://verilog-make-frontend.vercel.app 
