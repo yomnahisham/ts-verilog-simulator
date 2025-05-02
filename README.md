@@ -1,146 +1,146 @@
-# Vivado-Make: A Modern Web-Based Verilog Simulator
+# Verilog Simulator (Vivado-Make)
 
-Vivado-Make is a modern, web-based alternative to Vivado for Verilog simulation. It provides a user-friendly interface for designing, simulating, and visualizing Verilog code without the need for expensive licenses or complex installations.
+A modern, web-based Verilog simulator that empowers students and professionals to write, compile, and simulate Verilog code directly in the browser—no local toolchain required. Ideal for education, prototyping, and collaborative development.
 
-## Features
+## Project Overview
 
-### Current Features
+Verilog Simulator (AKA Vivado-Make) replaces heavyweight, licensed EDA tools with a lightweight, accessible web alternative. Key highlights:
 
-- **Modern Web Interface**: Clean, intuitive UI inspired by VS Code for a familiar development experience
-- **Real-time Verilog Simulation**: Run simulations directly in your browser
-- **Waveform Visualization**: View simulation results in an interactive waveform viewer
-- **Syntax Highlighting**: Advanced Verilog syntax highlighting with Monaco Editor
-- **Module Detection**: Automatic detection of modules and testbenches in your code
-- **Responsive Design**: Works on desktop and tablet devices
-- **Serverless Architecture**: Deployed on Vercel for high availability and scalability
-- **Cross-Platform**: Works on any device with a modern web browser
-- **No Installation Required**: Access your Verilog projects from anywhere
+- **Browser-Based**: Write and run Verilog and SystemVerilog testbenches in your browser
+- **Zero Setup**: No local installation—just open the URL and start coding
+- **Scalable Backend**: Containerized FastAPI service running Icarus Verilog for compilation and simulation
+- **Interactive UI**: Real-time syntax checking, waveform viewer, and code validation inspired by VS Code
 
-### Coming Soon
+## Technology Stack
 
-- **Collaborative Coding**: Real-time collaboration features for team-based development
-- **Project Management**: Save and organize your Verilog projects
-- **Version Control**: Track changes to your Verilog code
-- **Advanced Waveform Analysis**: More powerful waveform visualization tools
-- **SystemVerilog Support**: Enhanced support for SystemVerilog features
-- **Custom Testbench Generation**: AI-assisted testbench creation
-- **Performance Optimization**: Improved simulation performance for complex designs
-- **Export Options**: Export waveforms and simulation results in various formats
+| Layer | Technology |
+|-------|------------|
+| Frontend | Next.js 14, React, TypeScript, Tailwind CSS, Monaco Editor |
+| Backend | Python 3.11, FastAPI, Icarus Verilog (iverilog, vvp), Docker |
+| Deployment | Vercel (frontend), Render (backend) |
+| Visualization | Custom waveform viewer based on VCD parsing |
+
+## Project Structure
+
+```
+.
+├── frontend/           # Next.js frontend application
+│   ├── src/           # Source code
+│   ├── app/           # Next.js app directory
+│   └── public/        # Static assets
+├── backend/           # FastAPI backend service
+│   ├── app/          # Application code
+│   └── test/         # Test suite
+├── Dockerfile        # Backend container configuration
+└── render.yaml       # Render deployment configuration
+```
+
+## Key Features
+
+### Current
+- **Real-Time Simulation**: Compile & simulate modules and testbenches on-the-fly
+- **Waveform Viewer**: Interactive VCD waveform plot with zoom, pan, and cursor
+- **Syntax Highlighting**: Monaco Editor integration for Verilog/SystemVerilog
+- **Auto Module Detection**: Discover module and testbench entries automatically
+- **Error Reporting**: Inline compiler errors linked to source code lines
+- **Responsive Design**: Mobile and tablet support for on-the-go access
+- **Serverless Frontend**: Hosted on Vercel for zero-maintenance scalability
+
+### Upcoming
+- **Collaborative Coding**: Real-time multi-user editing and shared simulation sessions
+- **Advanced Waveform Tools**: Signal markers, measurement cursors, and export options
+- **AI-Assisted Testbenches**: Generate testbench scaffolds with GPT-based prompts
 
 ## Getting Started
 
 ### Online Demo
-
-Visit [live demo](https://ts-verilog-simulator-frontend.vercel.app) to try Vivado-Make without any installation.
+Access the live demo at: [https://ts-verilog-simulator-frontend.vercel.app/simulation](https://ts-verilog-simulator-frontend.vercel.app/simulation)
 
 ### Local Development
 
-#### Backend
+#### Prerequisites
+- Node.js v18+
+- Python 3.11
+- Docker (optional)
+- Icarus Verilog (iverilog)
 
+#### Clone & Setup
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python -m uvicorn app.main:app --reload --port 8001
+git clone https://github.com/yomnahisham/ts-verilog-simulator.git
+cd ts-verilog-simulator
 ```
 
 #### Frontend
-
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
+URL: http://localhost:3000
 
-## Technology Stack
+#### Backend
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8001
+```
+API: http://localhost:8001
 
-- **Frontend**: Next.js, React, TypeScript, Tailwind CSS, Monaco Editor
-- **Backend**: FastAPI, Python, Icarus Verilog
-- **Deployment**: Vercel, AWS Lambda
-- **Simulation Engine**: Icarus Verilog (iverilog, vvp)
-- **Waveform Visualization**: Custom implementation
+### Docker Deployment
+```bash
+docker build -t verilog-sim-backend backend/
+docker run -p 8001:8001 verilog-sim-backend
+```
 
 ## Usage Guide
 
-1. **Create Your Design**: Write your Verilog design code in the editor
-2. **Create a Testbench**: Write a testbench to simulate your design
-3. **Select Modules**: Choose your top module and testbench module
-4. **Run Simulation**: Click "Run Simulation" to execute
-5. **View Results**: Analyze the waveform and simulation output
+1. **Create Design**: Write your Verilog/SystemVerilog code in the editor
+2. **Add Testbench**: Author or generate a testbench module
+3. **Select Top Modules**: Choose DUT and testbench in the dropdown
+4. **Run Simulation**: Hit Run and watch the console & waveform viewer
+5. **Analyze Results**: Inspect signals, debug errors, and iterate
 
 ### Example Testbench
-
 ```verilog
 module example_tb;
-  reg clk;
+  reg clk = 0;
   reg rst_n;
   wire [3:0] q;
-  
-  // Instantiate the design under test
+
   example dut (
     .clk(clk),
-    .rst(rst_n),
+    .rst_n(rst_n),
     .count(q)
   );
-  
-  // Clock generation
+
+  // Clock generator
+  always #5 clk = ~clk;
+
   initial begin
-    clk = 0;
-    forever #5 clk = ~clk;
-  end
-  
-  // Test stimulus
-  initial begin
-    // Initialize inputs
     rst_n = 0;
-    
-    // Add VCD dump commands
     $dumpfile("waveform.vcd");
     $dumpvars(0, example_tb);
-    
-    // Reset sequence
     #20 rst_n = 1;
-    
-    // Test sequence
     #100;
-    
-    // End simulation
-    #100 $finish;
+    $finish;
   end
 endmodule
 ```
-
-## Configuration
-
-### Environment Variables
-
-- `NEXT_PUBLIC_BACKEND_URL`: URL of the backend API (default: `http://localhost:8001`)
-- `CORS_ORIGINS`: Allowed origins for CORS (default: `http://localhost:3000,https://ts-verilog-simulator-frontend.vercel.app`)
-
-## Deployment
-
-### Backend (Vercel)
-
-```bash
-cd backend
-vercel
-```
-
-### Frontend (Vercel)
-
-```bash
-cd frontend
-vercel
+Note:- It is important that you include the following to be able to actually see the resulting waveform.
+```verilog
+$dumpfile("output_waveform_name.vcd");
+$dumpvars(0, your_testbench_name);
 ```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit an Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
 
 ## Acknowledgments
 
@@ -149,6 +149,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [FastAPI](https://fastapi.tiangolo.com/) for the backend framework
 - [Next.js](https://nextjs.org/) for the frontend framework
 
-## Contact
-
-For questions or feedback, please open an issue on our [GitHub repository](https://github.com/yomnahisham/ts-verilog-simulator). 
+### Loved working on this project fr!

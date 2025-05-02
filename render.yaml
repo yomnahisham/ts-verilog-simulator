@@ -6,4 +6,4 @@ services:
     dockerfilePath: ./Dockerfile
     envVars:
       - key: CORS_ORIGINS
-        value: https://verilog-make-frontend.vercel.app 
+        value: https://verilog-simulator-frontend.vercel.app 
