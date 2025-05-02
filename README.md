@@ -54,7 +54,7 @@ Verilog Simulator (AKA Vivado-Make) replaces heavyweight, licensed EDA tools wit
 ## Getting Started
 
 ### Online Demo
-Access the live demo at: [https://ts-verilog-simulator-frontend.vercel.app/simulation](https://ts-verilog-simulator-frontend.vercel.app/simulation)
+Access the live demo at: [https://ts-verilog-simulator-frontend.vercel.app](https://ts-verilog-simulator-frontend.vercel.app)
 
 ### Local Development
 
