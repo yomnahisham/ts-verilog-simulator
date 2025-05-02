@@ -4,13 +4,14 @@ services:
     name: verilog-make-backend
     env: python
     buildCommand: |
-      apt-get update && apt-get install -y iverilog
       cd backend
       python -m venv .venv
       source .venv/bin/activate
       pip install -r requirements.txt
       mkdir -p static
-    startCommand: cd backend && source .venv/bin/activate && PYTHONPATH=$PYTHONPATH:. uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: |
+      apt-get update && apt-get install -y iverilog
+      cd backend && source .venv/bin/activate && PYTHONPATH=$PYTHONPATH:. uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
