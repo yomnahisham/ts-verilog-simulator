@@ -1154,10 +1154,11 @@ endmodule`}</pre>
               <div>
                 <h3 className="text-lg font-medium text-white mb-2">Viewing Signed and Unsigned Signals</h3>
                 <ul className="list-disc pl-5 mt-2 space-y-1">
-                  <li>For each multi-bit signal, you can toggle between signed and unsigned display using the <strong>signed</strong> checkbox next to the signal name in the waveform panel.</li>
+                  <li>To control signed/unsigned display for each multi-bit signal, click the <strong>signal options</strong> (gear/eye) button in the waveform panel header. This opens a window where you can toggle signed display for each signal.</li>
                   <li>When the toggle is <strong>off</strong>, the signal is shown as <strong>unsigned</strong> (default, e.g., 1001 = 9).</li>
                   <li>When the toggle is <strong>on</strong>, the signal is shown as <strong>signed</strong> (two's complement, e.g., 1001 = -7 for 4 bits).</li>
-                  <li>This allows you to view a mix of signed and unsigned signals as needed, regardless of their Verilog declaration.</li>
+                  <li><strong>Automatic detection:</strong> If a multi-bit signal's name contains the word <code>signed</code> (case-insensitive, e.g., <code>signed_A</code>), it will default to signed display. You can override this in the signal options window.</li>
+                  <li><strong>Warning:</strong> The word <code>signed</code> is now reserved for auto-detection. Avoid using it in signal names unless you want the signal to be treated as signed by default.</li>
                 </ul>
               </div>
             </div>

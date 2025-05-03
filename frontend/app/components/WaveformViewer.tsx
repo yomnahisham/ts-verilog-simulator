@@ -138,6 +138,9 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   // Remove global showSigned toggle, add per-signal signed display state
   const [signalSignedDisplay, setSignalSignedDisplay] = useState<Record<string, boolean>>({});
 
+  // Add state for signal options modal
+  const [showSignalOptions, setShowSignalOptions] = useState(false);
+
   const generateBitSignals = (signal: Signal): Signal[] => {
     // Check if we already have generated bit signals for this bus
     const cacheKey = `${signal.id}_${signal.width}`;
@@ -1015,6 +1018,21 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     }
   };
 
+  // Update signalSignedDisplay to auto-detect 'signed' in name on first load
+  useEffect(() => {
+    if (signals.length > 0) {
+      setSignalSignedDisplay(prev => {
+        const updated: Record<string, boolean> = { ...prev };
+        signals.forEach(sig => {
+          if (sig.width > 1 && updated[sig.name] === undefined) {
+            updated[sig.name] = /signed/i.test(sig.name);
+          }
+        });
+        return updated;
+      });
+    }
+  }, [signals]);
+
   return (
     <div className="w-full h-full flex flex-col">
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 0 4px 8px', gap: 8 }}>
@@ -1048,17 +1066,88 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
             {/* Add spacing div to match timestamp area */}
             <div style={{ height: TIME_AXIS_HEIGHT }} />
 
-            {/* Name|Value header */}
+            {/* Name|Value header and signal options button */}
             <div style={{
               display: 'flex',
               fontWeight: 'bold',
               borderBottom: `2px solid ${SIGNAL_PANEL_BORDER}`,
               height: HEADER_HEIGHT,
-              backgroundColor: SIGNAL_PANEL_BG
+              backgroundColor: SIGNAL_PANEL_BG,
+              alignItems: 'center',
+              position: 'relative'
             }}>
               <div style={{ width: '75%', paddingLeft: 8 }}>Name</div>
               <div style={{ width: '25%' }}>Value</div>
+              {/* Signal options button */}
+              <button
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#00FF00',
+                  fontSize: 18,
+                  padding: 0
+                }}
+                title="Signal display options"
+                onClick={e => {
+                  e.stopPropagation();
+                  setShowSignalOptions(v => !v);
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c.13.31.2.65.2 1v.09c0 .66-.39 1.25-1 1.51a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 16 4.6c.31-.13.65-.2 1-.2h.09c.66 0 1.25.39 1.51 1a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 8c-.13-.31-.2-.65-.2-1V6.91c0-.66.39-1.25 1-1.51a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c-.13.31-.2.65-.2 1v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 21 15c-.31.13-.65.2-1 .2h-.09c-.66 0-1.25-.39-1.51-1a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 19.4 15z"/></svg>
+              </button>
             </div>
+
+            {/* Signal options modal */}
+            {showSignalOptions && (
+              <div style={{
+                position: 'absolute',
+                top: 60,
+                right: 20,
+                zIndex: 10,
+                background: '#181818',
+                border: '1px solid #00FF00',
+                borderRadius: 8,
+                boxShadow: '0 2px 12px #000a',
+                padding: 16,
+                minWidth: 260,
+                color: '#fff',
+              }}>
+                <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Signal Display Options</div>
+                {signals.filter(s => s.width > 1).map(sig => (
+                  <div key={sig.name} style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                    <span style={{ flex: 1 }}>{sig.name} [{sig.width-1}:0]</span>
+                    <input
+                      type="checkbox"
+                      checked={!!signalSignedDisplay[sig.name]}
+                      onChange={e => setSignalSignedDisplay(prev => ({ ...prev, [sig.name]: e.target.checked }))}
+                      style={{ width: 14, height: 14, accentColor: '#00FF00', marginLeft: 8, cursor: 'pointer' }}
+                      title="Show as signed"
+                    />
+                  </div>
+                ))}
+                <button
+                  style={{
+                    marginTop: 10,
+                    background: '#00FF00',
+                    color: '#181818',
+                    border: 'none',
+                    borderRadius: 4,
+                    padding: '4px 12px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    float: 'right'
+                  }}
+                  onClick={() => setShowSignalOptions(false)}
+                >
+                  Done
+                </button>
+              </div>
+            )}
 
             {signals.map((signal, index) => (
               <div
@@ -1113,35 +1202,6 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
                       </span>
                     )}
                     {signal.name} {signal.width > 1 ? `[${signal.width-1}:0]` : ''}
-                    {/* Per-signal signed/unsigned toggle - small checkbox, no label, with tooltip */}
-                    {signal.width > 1 && (
-                      <input
-                        type="checkbox"
-                        checked={!!signalSignedDisplay[signal.name]}
-                        onChange={e => {
-                          setSignalSignedDisplay(prev => ({
-                            ...prev,
-                            [signal.name]: e.target.checked
-                          }));
-                        }}
-                        title="Show as signed"
-                        style={{
-                          marginLeft: 8,
-                          width: 13,
-                          height: 13,
-                          accentColor: '#00FF00',
-                          cursor: 'pointer',
-                          verticalAlign: 'middle',
-                          boxShadow: 'none',
-                          border: '1px solid #00FF00',
-                          background: 'transparent',
-                          appearance: 'none',
-                          borderRadius: 2,
-                          display: 'inline-block'
-                        }}
-                        onClick={e => e.stopPropagation()}
-                      />
-                    )}
                   </div>
                   <div style={{ width: '25%', paddingLeft: 4 }}>
                     {(() => {
