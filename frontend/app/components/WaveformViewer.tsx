@@ -1081,7 +1081,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
                   }}
                   onClick={() => setSelectedSignal(selectedSignal === signal.name ? null : signal.name)}
                 >
-                  <div style={{ width: '75%', paddingLeft: 8, display: 'flex', alignItems: 'center' }}>
+                  <div style={{ width: '75%', paddingLeft: 8, display: 'flex', alignItems: 'center', position: 'relative' }}>
                     {signal.width > 1 && (
                       <span
                         style={{
@@ -1113,23 +1113,34 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
                       </span>
                     )}
                     {signal.name} {signal.width > 1 ? `[${signal.width-1}:0]` : ''}
-                    {/* Per-signal signed/unsigned toggle */}
+                    {/* Per-signal signed/unsigned toggle - small checkbox, no label, with tooltip */}
                     {signal.width > 1 && (
-                      <label style={{ marginLeft: 10, fontSize: 11, color: '#00FF00', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <input
-                          type="checkbox"
-                          checked={!!signalSignedDisplay[signal.name]}
-                          onChange={e => {
-                            setSignalSignedDisplay(prev => ({
-                              ...prev,
-                              [signal.name]: e.target.checked
-                            }));
-                          }}
-                          style={{ marginRight: 3 }}
-                          onClick={e => e.stopPropagation()}
-                        />
-                        signed
-                      </label>
+                      <input
+                        type="checkbox"
+                        checked={!!signalSignedDisplay[signal.name]}
+                        onChange={e => {
+                          setSignalSignedDisplay(prev => ({
+                            ...prev,
+                            [signal.name]: e.target.checked
+                          }));
+                        }}
+                        title="Show as signed"
+                        style={{
+                          marginLeft: 8,
+                          width: 13,
+                          height: 13,
+                          accentColor: '#00FF00',
+                          cursor: 'pointer',
+                          verticalAlign: 'middle',
+                          boxShadow: 'none',
+                          border: '1px solid #00FF00',
+                          background: 'transparent',
+                          appearance: 'none',
+                          borderRadius: 2,
+                          display: 'inline-block'
+                        }}
+                        onClick={e => e.stopPropagation()}
+                      />
                     )}
                   </div>
                   <div style={{ width: '25%', paddingLeft: 4 }}>
