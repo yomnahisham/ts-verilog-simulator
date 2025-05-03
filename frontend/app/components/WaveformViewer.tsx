@@ -135,6 +135,9 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   // Add a cache for generated bit signals
   const bitSignalCache = useRef<Record<string, Signal[]>>({});
 
+  // Add state for global signed display toggle
+  const [showSigned, setShowSigned] = useState(false);
+
   const generateBitSignals = (signal: Signal): Signal[] => {
     // Check if we already have generated bit signals for this bus
     const cacheKey = `${signal.id}_${signal.width}`;
@@ -295,10 +298,15 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     // For single-bit values or bit signals, return as is
     if (width === 1 || isBitSignal) return value;
 
-    // For multi-bit values, use the specified format
-    const format = signalName && signalDisplayFormats[signalName]
+    // For multi-bit values, use the global showSigned toggle
+    let format = signalName && signalDisplayFormats[signalName]
       ? signalDisplayFormats[signalName]
       : defaultDisplayFormat;
+
+    // If the global toggle is on, force signed_decimal
+    if (showSigned) {
+      format = 'signed_decimal';
+    }
 
     // Ensure the value is properly padded to the correct width
     const paddedValue = value.padStart(width, '0');
@@ -764,7 +772,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
         ctx.font = '12px monospace';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        let displayValue = formatSignalValue(lastValue, signal.width, signal.name);
+        let displayValue = formatSignalValue(lastValue, signal.width, signal.name, false);
         ctx.fillText(displayValue, 5, yCenter);
 
         // Draw the bus value line
@@ -792,7 +800,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
           ctx.stroke();
 
           // Draw value
-          displayValue = formatSignalValue(value, signal.width, signal.name);
+          displayValue = formatSignalValue(value, signal.width, signal.name, false);
           const textWidth = ctx.measureText(displayValue).width;
           
           // Calculate next transition point
@@ -817,7 +825,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
         // Draw final value if there's space
         if (width - lastX > 50) {
-          displayValue = formatSignalValue(lastValue, signal.width, signal.name);
+          displayValue = formatSignalValue(lastValue, signal.width, signal.name, false);
           const textWidth = ctx.measureText(displayValue).width;
           
           // Draw value background
@@ -1009,6 +1017,17 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
   return (
     <div className="w-full h-full flex flex-col">
+      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 0 4px 8px', gap: 8 }}>
+        <label style={{ color: '#fff', fontSize: 13, userSelect: 'none' }}>
+          <input
+            type="checkbox"
+            checked={showSigned}
+            onChange={e => setShowSigned(e.target.checked)}
+            style={{ marginRight: 6 }}
+          />
+          Show all multi-bit signals as signed
+        </label>
+      </div>
       <Allotment className="h-full" defaultSizes={[20, 80]}>
         <Allotment.Pane>
           <div style={{
@@ -1094,7 +1113,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
                       const currentValue = hoverInfo
                         ? getSignalValueAtTime(signal, hoverInfo.time)
                         : getSignalValueAtTime(signal, cursorTime || 0);
-                      return formatSignalValue(currentValue, signal.width, signal.name);
+                      return formatSignalValue(currentValue, signal.width, signal.name, false);
                     })()}
                   </div>
                 </div>
