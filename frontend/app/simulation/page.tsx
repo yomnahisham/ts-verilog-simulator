@@ -1144,21 +1144,21 @@ endmodule`}</pre>
               <div>
                 <h3 className="text-lg font-medium text-white mb-2">Waveform Viewer Controls</h3>
                 <ul className="list-disc pl-5 mt-2 space-y-1">
-                  <li><strong>Zoom In/Out:</strong> Use the + and - buttons or mouse wheel</li>
-                  <li><strong>Pan Left/Right:</strong> Use the arrow buttons or drag the waveform</li>
-                  <li><strong>Fit to View:</strong> Click the fit button to see the entire waveform</li>
-                  <li><strong>Collapse/Expand:</strong> Click on signal group headers to collapse/expand</li>
-                  <li><strong>Select Signals:</strong> Click on a signal to highlight it</li>
+                  <li><strong>+</strong> (Zoom In): Zooms in on the waveform for a more detailed view.</li>
+                  <li><strong>−</strong> (Zoom Out): Zooms out to see a broader time range.</li>
+                  <li><strong>⤢</strong> (Fit to View): Fits the entire waveform into the visible area.</li>
+                  <li><strong>Z</strong> (Zoom to 0-60ns): Quickly zooms to the 0-60ns time range.</li>
+                  <li><strong>Gear Icon</strong> (Signal Options): Opens the signal options modal, where you can toggle signed/unsigned display for each multi-bit signal individually.</li>
                 </ul>
               </div>
               <div>
                 <h3 className="text-lg font-medium text-white mb-2">Viewing Signed and Unsigned Signals</h3>
                 <ul className="list-disc pl-5 mt-2 space-y-1">
-                  <li>To control signed/unsigned display for each multi-bit signal, click the <strong>signal options</strong> (gear/eye) button in the waveform panel header. This opens a window where you can toggle signed display for each signal.</li>
+                  <li>To control signed/unsigned display for each multi-bit signal, click the <strong>Signal Options</strong> (gear) button in the waveform controls bar. This opens a window where you can toggle signed display for each signal individually.</li>
                   <li>When the toggle is <strong>off</strong>, the signal is shown as <strong>unsigned</strong> (default, e.g., 1001 = 9).</li>
                   <li>When the toggle is <strong>on</strong>, the signal is shown as <strong>signed</strong> (two's complement, e.g., 1001 = -7 for 4 bits).</li>
                   <li><strong>Automatic detection:</strong> If a multi-bit signal's name contains the word <code>signed</code> (case-insensitive, e.g., <code>signed_A</code>), it will default to signed display. You can override this in the signal options window.</li>
-                  <li><strong>Warning:</strong> The word <code>signed</code> is now reserved for auto-detection. Avoid using it in signal names unless you want the signal to be treated as signed by default.</li>
+                  <li><strong>Note:</strong> The global 'Show all multi-bit signals as signed' option has been removed. Use the per-signal toggles in the Signal Options modal instead.</li>
                 </ul>
               </div>
             </div>

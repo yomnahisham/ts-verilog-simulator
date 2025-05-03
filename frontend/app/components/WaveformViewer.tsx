@@ -66,6 +66,7 @@ export interface WaveformViewerRef {
   handleZoomToRange: () => void;
   handleCollapseAll: () => void;
   handleExpandAll: () => void;
+  handleSignalOptions: () => void;
 }
 
 const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcdData }, ref) => {
@@ -396,6 +397,9 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
         .map(s => s.name);
       setExpandedSignals(new Set(allBusSignals));
       drawWaveform();
+    },
+    handleSignalOptions: () => {
+      setShowSignalOptions(v => !v);
     }
   }));
 
@@ -1035,23 +1039,6 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div style={{ display: 'flex', alignItems: 'center', padding: '8px 0 4px 8px', gap: 8 }}>
-        <label style={{ color: '#fff', fontSize: 13, userSelect: 'none' }}>
-          <input
-            type="checkbox"
-            checked={!!signalSignedDisplay[selectedSignal || '']}
-            onChange={e => {
-              setSignalSignedDisplay(prev => ({
-                ...prev,
-                [selectedSignal || '']: e.target.checked
-              }));
-            }}
-            style={{ marginRight: 6 }}
-            onClick={e => e.stopPropagation()}
-          />
-          Show all multi-bit signals as signed
-        </label>
-      </div>
       <Allotment className="h-full" defaultSizes={[20, 80]}>
         <Allotment.Pane>
           <div style={{
@@ -1066,7 +1053,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
             {/* Add spacing div to match timestamp area */}
             <div style={{ height: TIME_AXIS_HEIGHT }} />
 
-            {/* Name|Value header and signal options button */}
+            {/* Name|Value header */}
             <div style={{
               display: 'flex',
               fontWeight: 'bold',
@@ -1078,28 +1065,6 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
             }}>
               <div style={{ width: '75%', paddingLeft: 8 }}>Name</div>
               <div style={{ width: '25%' }}>Value</div>
-              {/* Signal options button */}
-              <button
-                style={{
-                  position: 'absolute',
-                  right: 8,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: '#00FF00',
-                  fontSize: 18,
-                  padding: 0
-                }}
-                title="Signal display options"
-                onClick={e => {
-                  e.stopPropagation();
-                  setShowSignalOptions(v => !v);
-                }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c.13.31.2.65.2 1v.09c0 .66-.39 1.25-1 1.51a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 16 4.6c.31-.13.65-.2 1-.2h.09c.66 0 1.25.39 1.51 1a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 8c-.13-.31-.2-.65-.2-1V6.91c0-.66.39-1.25 1-1.51a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c-.13.31-.2.65-.2 1v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 21 15c-.31.13-.65.2-1 .2h-.09c-.66 0-1.25-.39-1.51-1a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 19.4 15z"/></svg>
-              </button>
             </div>
 
             {/* Signal options modal */}
@@ -1333,6 +1298,36 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
                   }}
                 />
               ))}
+            </div>
+            {/* Controls bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 0 12px', position: 'relative', zIndex: 2 }}>
+              <button title="Zoom In" onClick={() => {
+                if (ref && 'current' in ref && ref.current) {
+                  ref.current.handleZoomIn();
+                }
+              }} style={{ background: 'none', border: 'none', color: '#00FF00', fontSize: 18, cursor: 'pointer' }}>+</button>
+              <button title="Zoom Out" onClick={() => {
+                if (ref && 'current' in ref && ref.current) {
+                  ref.current.handleZoomOut();
+                }
+              }} style={{ background: 'none', border: 'none', color: '#00FF00', fontSize: 18, cursor: 'pointer' }}>−</button>
+              <button title="Fit to View" onClick={() => {
+                if (ref && 'current' in ref && ref.current) {
+                  ref.current.handleFitToView();
+                }
+              }} style={{ background: 'none', border: 'none', color: '#00FF00', fontSize: 18, cursor: 'pointer' }}>⤢</button>
+              <button title="Zoom to 0-60ns" onClick={() => {
+                if (ref && 'current' in ref && ref.current) {
+                  ref.current.handleZoomToRange();
+                }
+              }} style={{ background: 'none', border: 'none', color: '#00FF00', fontSize: 18, cursor: 'pointer' }}>Z</button>
+              <button title="Signal Options" onClick={() => {
+                if (ref && 'current' in ref && ref.current) {
+                  ref.current.handleSignalOptions();
+                }
+              }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#00FF00', fontSize: 18, marginLeft: 8 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c.13.31.2.65.2 1v.09c0 .66-.39 1.25-1 1.51a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 16 4.6c.31-.13.65-.2 1-.2h.09c.66 0 1.25.39 1.51 1a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 8c-.13-.31-.2-.65-.2-1V6.91c0-.66.39-1.25 1-1.51a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c-.13.31-.2.65-.2 1v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 21 15c-.31.13-.65.2-1 .2h-.09c-.66 0-1.25-.39-1.51-1a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 19.4 15z"/></svg>
+              </button>
             </div>
           </div>
         </Allotment.Pane>
