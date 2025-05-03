@@ -1151,6 +1151,15 @@ endmodule`}</pre>
                   <li><strong>Select Signals:</strong> Click on a signal to highlight it</li>
                 </ul>
               </div>
+              <div>
+                <h3 className="text-lg font-medium text-white mb-2">Viewing Signed and Unsigned Signals</h3>
+                <ul className="list-disc pl-5 mt-2 space-y-1">
+                  <li>For each multi-bit signal, you can toggle between signed and unsigned display using the <strong>signed</strong> checkbox next to the signal name in the waveform panel.</li>
+                  <li>When the toggle is <strong>off</strong>, the signal is shown as <strong>unsigned</strong> (default, e.g., 1001 = 9).</li>
+                  <li>When the toggle is <strong>on</strong>, the signal is shown as <strong>signed</strong> (two's complement, e.g., 1001 = -7 for 4 bits).</li>
+                  <li>This allows you to view a mix of signed and unsigned signals as needed, regardless of their Verilog declaration.</li>
+                </ul>
+              </div>
             </div>
             
             <div className="mt-6 flex justify-end">

@@ -135,8 +135,8 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   // Add a cache for generated bit signals
   const bitSignalCache = useRef<Record<string, Signal[]>>({});
 
-  // Add state for global signed display toggle
-  const [showSigned, setShowSigned] = useState(false);
+  // Remove global showSigned toggle, add per-signal signed display state
+  const [signalSignedDisplay, setSignalSignedDisplay] = useState<Record<string, boolean>>({});
 
   const generateBitSignals = (signal: Signal): Signal[] => {
     // Check if we already have generated bit signals for this bus
@@ -280,7 +280,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     return binary[0] + '|' + binary.slice(1); // Separate sign bit with a pipe
   };
 
-  // Helper: Format signal value for display based on format preference
+  // Update formatSignalValue to use per-signal signed display
   const formatSignalValue = (value: string, width: number, signalName?: string, isBitSignal: boolean = false): string => {
     // Handle special values
     if (value === 'x' || value === 'z') return value;
@@ -298,13 +298,13 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     // For single-bit values or bit signals, return as is
     if (width === 1 || isBitSignal) return value;
 
-    // For multi-bit values, use the global showSigned toggle
+    // For multi-bit values, use the per-signal signed display toggle
     let format = signalName && signalDisplayFormats[signalName]
       ? signalDisplayFormats[signalName]
       : defaultDisplayFormat;
 
-    // If the global toggle is on, force signed_decimal
-    if (showSigned) {
+    // If the per-signal toggle is on, force signed_decimal
+    if (signalName && signalSignedDisplay[signalName]) {
       format = 'signed_decimal';
     }
 
@@ -1021,9 +1021,15 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
         <label style={{ color: '#fff', fontSize: 13, userSelect: 'none' }}>
           <input
             type="checkbox"
-            checked={showSigned}
-            onChange={e => setShowSigned(e.target.checked)}
+            checked={!!signalSignedDisplay[selectedSignal || '']}
+            onChange={e => {
+              setSignalSignedDisplay(prev => ({
+                ...prev,
+                [selectedSignal || '']: e.target.checked
+              }));
+            }}
             style={{ marginRight: 6 }}
+            onClick={e => e.stopPropagation()}
           />
           Show all multi-bit signals as signed
         </label>
@@ -1107,6 +1113,24 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
                       </span>
                     )}
                     {signal.name} {signal.width > 1 ? `[${signal.width-1}:0]` : ''}
+                    {/* Per-signal signed/unsigned toggle */}
+                    {signal.width > 1 && (
+                      <label style={{ marginLeft: 10, fontSize: 11, color: '#00FF00', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <input
+                          type="checkbox"
+                          checked={!!signalSignedDisplay[signal.name]}
+                          onChange={e => {
+                            setSignalSignedDisplay(prev => ({
+                              ...prev,
+                              [signal.name]: e.target.checked
+                            }));
+                          }}
+                          style={{ marginRight: 3 }}
+                          onClick={e => e.stopPropagation()}
+                        />
+                        signed
+                      </label>
+                    )}
                   </div>
                   <div style={{ width: '25%', paddingLeft: 4 }}>
                     {(() => {
