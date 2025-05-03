@@ -237,7 +237,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     }
     
     if (isSigned) {
-      // For signed numbers, check if the MSB is 1 (negative)
+      // For signed numbers, handle two's complement properly
       const isNegative = binary[0] === '1';
       if (isNegative) {
         // Convert to two's complement
@@ -300,20 +300,23 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
       ? signalDisplayFormats[signalName]
       : defaultDisplayFormat;
 
+    // Ensure the value is properly padded to the correct width
+    const paddedValue = value.padStart(width, '0');
+
     switch (format) {
       case 'binary':
-        return value.padStart(width, '0');
+        return paddedValue;
       case 'signed_binary':
-        return formatSignedBinary(value.padStart(width, '0'));
+        return formatSignedBinary(paddedValue);
       case 'hex':
-        return binaryToHex(value, false);
+        return binaryToHex(paddedValue, false);
       case 'signed_hex':
-        return binaryToHex(value, true);
+        return binaryToHex(paddedValue, true);
       case 'signed_decimal':
-        return binaryToDecimal(value, true);
+        return binaryToDecimal(paddedValue, true);
       case 'decimal':
       default:
-        return binaryToDecimal(value, false);
+        return binaryToDecimal(paddedValue, false);
     }
   };
 
