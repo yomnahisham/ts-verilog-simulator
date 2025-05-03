@@ -28,8 +28,9 @@ interface Signal {
   busBits?: Signal[];
   color?: string;
   parentBus?: string;
-  displayFormat?: 'binary' | 'decimal' | 'hex'; // Format to display multi-bit values
+  displayFormat?: 'binary' | 'decimal' | 'hex' | 'signed_binary' | 'signed_decimal' | 'signed_hex'; // Format to display multi-bit values
   displayMode?: 'digital' | 'analog'; // Display mode for buses (Vivado-style)
+  isSigned?: boolean; // Whether the signal should be interpreted as signed
 }
 
 interface SignalGroup {
@@ -123,8 +124,8 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   // Add state for expanded buses and cursor time
   const [expandedBuses, setExpandedBuses] = useState<Record<string, boolean>>({});
   const [cursorTime, setCursorTime] = useState<number | null>(null);
-  const [signalDisplayFormats, setSignalDisplayFormats] = useState<Record<string, 'binary' | 'decimal' | 'hex'>>({});
-  const [defaultDisplayFormat, setDefaultDisplayFormat] = useState<'binary' | 'decimal' | 'hex'>('decimal');
+  const [signalDisplayFormats, setSignalDisplayFormats] = useState<Record<string, 'binary' | 'decimal' | 'hex' | 'signed_binary' | 'signed_decimal' | 'signed_hex'>>({});
+  const [defaultDisplayFormat, setDefaultDisplayFormat] = useState<'binary' | 'decimal' | 'hex' | 'signed_binary' | 'signed_decimal' | 'signed_hex'>('decimal');
   const [signalDisplayModes, setSignalDisplayModes] = useState<Record<string, 'digital' | 'analog'>>({});
   const [defaultDisplayMode, setDefaultDisplayMode] = useState<'digital' | 'analog'>('digital');
 
@@ -229,23 +230,51 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     return result;
   };
 
-  // Helper function to convert binary string to decimal
-  const binaryToDecimal = (binary: string): string => {
+  // Helper function to convert binary string to decimal (signed or unsigned)
+  const binaryToDecimal = (binary: string, isSigned: boolean = false): string => {
     if (binary.includes('x') || binary.includes('z')) {
       return binary;
     }
+    
+    if (isSigned) {
+      // For signed numbers, check if the MSB is 1 (negative)
+      const isNegative = binary[0] === '1';
+      if (isNegative) {
+        // Convert to two's complement
+        const inverted = binary.split('').map(bit => bit === '1' ? '0' : '1').join('');
+        const decimal = -(parseInt(inverted, 2) + 1);
+        return decimal.toString();
+      }
+    }
+    
     const decimal = parseInt(binary, 2);
     return isNaN(decimal) ? binary : decimal.toString();
   };
 
-  // Helper function to convert binary string to hexadecimal
-  const binaryToHex = (binary: string): string => {
+  // Helper function to convert binary string to hexadecimal (signed or unsigned)
+  const binaryToHex = (binary: string, isSigned: boolean = false): string => {
     if (binary.includes('x') || binary.includes('z')) {
       return binary;
     }
+    
+    if (isSigned) {
+      // For signed numbers, convert to decimal first then to hex
+      const decimal = parseInt(binaryToDecimal(binary, true));
+      if (isNaN(decimal)) return binary;
+      return decimal.toString(16).toUpperCase();
+    }
+    
     const decimal = parseInt(binary, 2);
     if (isNaN(decimal)) return binary;
     return decimal.toString(16).toUpperCase();
+  };
+
+  // Helper function to format binary with sign bit highlighted
+  const formatSignedBinary = (binary: string): string => {
+    if (binary.includes('x') || binary.includes('z')) {
+      return binary;
+    }
+    return binary[0] + '|' + binary.slice(1); // Separate sign bit with a pipe
   };
 
   // Helper: Format signal value for display based on format preference
@@ -274,11 +303,17 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     switch (format) {
       case 'binary':
         return value.padStart(width, '0');
+      case 'signed_binary':
+        return formatSignedBinary(value.padStart(width, '0'));
       case 'hex':
-        return binaryToHex(value);
+        return binaryToHex(value, false);
+      case 'signed_hex':
+        return binaryToHex(value, true);
+      case 'signed_decimal':
+        return binaryToDecimal(value, true);
       case 'decimal':
       default:
-        return binaryToDecimal(value);
+        return binaryToDecimal(value, false);
     }
   };
 
@@ -1073,32 +1108,32 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <div>Display:</div>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        {['digital', 'analog'].map(mode => (
+                        {['binary', 'signed_binary', 'decimal', 'signed_decimal', 'hex', 'signed_hex'].map(format => (
                           <div
-                            key={mode}
+                            key={format}
                             style={{
                               cursor: 'pointer',
                               padding: '0 4px',
-                              backgroundColor: (signal.displayMode || defaultDisplayMode) === mode ? '#2986f5' : 'transparent',
+                              backgroundColor: (signal.displayFormat || defaultDisplayFormat) === format ? '#2986f5' : 'transparent',
                               borderRadius: 2
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
-                              // Update the display mode for this signal
-                              setSignalDisplayModes(prev => ({
+                              // Update the display format for this signal
+                              setSignalDisplayFormats(prev => ({
                                 ...prev,
-                                [signal.name]: mode as 'digital' | 'analog'
+                                [signal.name]: format as 'binary' | 'signed_binary' | 'decimal' | 'signed_decimal' | 'hex' | 'signed_hex'
                               }));
 
                               // Update the signal object
                               setSignals(prev => prev.map(s =>
                                 s.name === signal.name
-                                  ? { ...s, displayMode: mode as 'digital' | 'analog' }
+                                  ? { ...s, displayFormat: format as 'binary' | 'signed_binary' | 'decimal' | 'signed_decimal' | 'hex' | 'signed_hex' }
                                   : s
                               ));
                             }}
                           >
-                            {mode}
+                            {format.replace('_', ' ')}
                           </div>
                         ))}
                       </div>
