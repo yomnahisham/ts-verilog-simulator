@@ -15,6 +15,7 @@ import 'allotment/dist/style.css';
 
 interface WaveformViewerProps {
   vcdData: string;
+  onSignalOptionsDone?: () => void;
 }
 
 interface Signal {
@@ -69,7 +70,7 @@ export interface WaveformViewerRef {
   handleSignalOptions: () => void;
 }
 
-const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcdData }, ref) => {
+const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcdData, onSignalOptionsDone }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const waveformAreaRef = useRef<HTMLDivElement>(null);
@@ -1070,44 +1071,49 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
             {/* Signal options modal */}
             {showSignalOptions && (
               <div style={{
-                position: 'absolute',
-                top: 60,
-                right: 20,
-                zIndex: 10,
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                zIndex: 1000,
                 background: '#181818',
                 border: '1px solid #00FF00',
                 borderRadius: 8,
-                boxShadow: '0 2px 12px #000a',
-                padding: 16,
-                minWidth: 260,
+                boxShadow: '0 2px 24px #000a',
+                padding: 24,
+                minWidth: 320,
                 color: '#fff',
               }}>
-                <div style={{ fontWeight: 'bold', marginBottom: 8 }}>Signal Display Options</div>
+                <div style={{ fontWeight: 'bold', marginBottom: 12, fontSize: 18 }}>Signal Display Options</div>
                 {signals.filter(s => s.width > 1).map(sig => (
-                  <div key={sig.name} style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                  <div key={sig.name} style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
                     <span style={{ flex: 1 }}>{sig.name} [{sig.width-1}:0]</span>
                     <input
                       type="checkbox"
                       checked={!!signalSignedDisplay[sig.name]}
                       onChange={e => setSignalSignedDisplay(prev => ({ ...prev, [sig.name]: e.target.checked }))}
-                      style={{ width: 14, height: 14, accentColor: '#00FF00', marginLeft: 8, cursor: 'pointer' }}
+                      style={{ width: 16, height: 16, accentColor: '#00FF00', marginLeft: 12, cursor: 'pointer' }}
                       title="Show as signed"
                     />
                   </div>
                 ))}
                 <button
                   style={{
-                    marginTop: 10,
+                    marginTop: 16,
                     background: '#00FF00',
                     color: '#181818',
                     border: 'none',
                     borderRadius: 4,
-                    padding: '4px 12px',
+                    padding: '6px 18px',
                     cursor: 'pointer',
                     fontWeight: 'bold',
-                    float: 'right'
+                    float: 'right',
+                    fontSize: 15
                   }}
-                  onClick={() => setShowSignalOptions(false)}
+                  onClick={() => {
+                    setShowSignalOptions(false);
+                    if (typeof onSignalOptionsDone === 'function') onSignalOptionsDone();
+                  }}
                 >
                   Done
                 </button>

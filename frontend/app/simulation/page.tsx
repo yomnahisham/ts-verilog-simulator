@@ -990,7 +990,7 @@ export default function SimulationPage() {
                 </div>
                 <div className="bg-[#252526] rounded overflow-auto" style={{ height: 'calc(100% - 2rem)' }}>
                   {waveformData ? (
-                    <WaveformViewer ref={waveformViewerRef} vcdData={waveformData} />
+                    <WaveformViewer ref={waveformViewerRef} vcdData={waveformData} onSignalOptionsDone={runSimulation} />
                   ) : (
                     <div className="p-4 text-gray-400">No waveform data available</div>
                   )}
