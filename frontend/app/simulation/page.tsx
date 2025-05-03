@@ -979,6 +979,13 @@ export default function SimulationPage() {
                         <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
                       </svg>
                     </button>
+                    <button
+                      onClick={() => waveformViewerRef.current?.handleSignalOptions()}
+                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D]"
+                      title="Signal Options"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c.13.31.2.65.2 1v.09c0 .66-.39 1.25-1 1.51a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 16 4.6c.31-.13.65-.2 1-.2h.09c.66 0 1.25.39 1.51 1a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 8c-.13-.31-.2-.65-.2-1V6.91c0-.66.39-1.25 1-1.51a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c-.13.31-.2.65-.2 1v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 21 15c-.31.13-.65.2-1 .2h-.09c-.66 0-1.25-.39-1.51-1a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 19.4 15z"/></svg>
+                    </button>
                   </div>
                 </div>
                 <div className="bg-[#252526] rounded overflow-auto" style={{ height: 'calc(100% - 2rem)' }}>
@@ -1142,12 +1149,16 @@ endmodule`}</pre>
               </div>
               
               <div>
-                <h3 className="text-lg font-medium text-white mb-2">Waveform Viewer Controls</h3>
+                <h3 className="text-lg font-medium text-white mb-2">Waveform Controls (Simulation Page)</h3>
                 <ul className="list-disc pl-5 mt-2 space-y-1">
-                  <li><strong>+</strong> (Zoom In): Zooms in on the waveform for a more detailed view.</li>
+                  <li><strong>+</strong> (Zoom In): Zooms in for a more detailed view of the waveform.</li>
                   <li><strong>−</strong> (Zoom Out): Zooms out to see a broader time range.</li>
+                  <li><strong>←</strong> (Pan Left): Scrolls the waveform view to the left.</li>
+                  <li><strong>→</strong> (Pan Right): Scrolls the waveform view to the right.</li>
                   <li><strong>⤢</strong> (Fit to View): Fits the entire waveform into the visible area.</li>
                   <li><strong>Z</strong> (Zoom to 0-60ns): Quickly zooms to the 0-60ns time range.</li>
+                  <li><strong>▼</strong> (Collapse All): Collapses all expanded buses/signals.</li>
+                  <li><strong>▲</strong> (Expand All): Expands all buses/signals.</li>
                   <li><strong>Gear Icon</strong> (Signal Options): Opens the signal options modal, where you can toggle signed/unsigned display for each multi-bit signal individually.</li>
                 </ul>
               </div>
