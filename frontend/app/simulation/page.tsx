@@ -12,8 +12,8 @@ interface File {
   content: string;
 }
 
-// Backend configuration
-const BACKEND_BASE_URL = 'http://localhost:8001';
+// Backend configuration-> make it 'https://localhost:8001' when running locally
+const BACKEND_BASE_URL = 'https://ts-verilog-simulator-backend.onrender.com';
 const BACKEND_API_URL = `${BACKEND_BASE_URL}/api/v1`;
 const USE_REAL_SIMULATION = true; // Flag to use real simulation instead of mock data
 
@@ -1356,7 +1356,7 @@ export default function SimulationPage() {
                         Report
                       </span>
                     </button>
-                  </div>
+                </div>
 
                   {/* Tab Content */}
                   <div className="p-4 text-sm text-gray-300 whitespace-pre-wrap flex-1 overflow-auto max-h-full">
@@ -1373,7 +1373,7 @@ export default function SimulationPage() {
                                 <line x1="12" y1="8" x2="12" y2="12" />
                                 <line x1="12" y1="16" x2="12.01" y2="16" />
                               </svg>
-                            </div>
+              </div>
                             <div className="ml-3 bg-[#1e1e1e] rounded p-2 overflow-auto max-h-full w-full text-xs border border-red-700">
                               <pre className="whitespace-pre-wrap text-xs leading-snug">{errorOutput}</pre>
                             </div>
