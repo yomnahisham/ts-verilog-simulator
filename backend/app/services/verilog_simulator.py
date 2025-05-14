@@ -72,6 +72,7 @@ class VerilogSimulator:
             compile_cmd = ["iverilog", "-o", os.path.join(temp_dir, "sim"), design_path, testbench_path]
             logger.debug(f"Compilation command: {' '.join(compile_cmd)}")
             
+            output = ""
             try:
                 compile_result = subprocess.run(
                     compile_cmd,
@@ -80,18 +81,63 @@ class VerilogSimulator:
                     cwd=temp_dir,
                     timeout=self.simulation_timeout
                 )
+                # Add detailed logging of iverilog output
+                logger.debug("=== iverilog Compilation Output ===")
+                logger.debug(f"Command: {' '.join(compile_cmd)}")
+                logger.debug(f"Return code: {compile_result.returncode}")
+                logger.debug("=== stdout ===")
+                logger.debug(compile_result.stdout or "No stdout output")
+                logger.debug("=== stderr ===")
+                logger.debug(compile_result.stderr or "No stderr output")
+                logger.debug("=== End of iverilog Output ===")
                 
+                # Always append both stdout and stderr to output
+                output += (compile_result.stdout or "")
+                output += (compile_result.stderr or "")
+                
+                # Check for compilation errors
                 if compile_result.returncode != 0:
-                    logger.error(f"Compilation failed: {compile_result.stderr}")
-                    return False, f"Compilation failed: {compile_result.stderr}", ""
+                    error_msg = compile_result.stderr
+                    logger.error(f"Compilation error: {error_msg}")
+                    
+                    # Parse common Verilog compilation errors
+                    if "syntax error" in error_msg.lower():
+                        # Extract line number and error message
+                        line_match = re.search(r'line (\d+):', error_msg)
+                        if line_match:
+                            line_num = line_match.group(1)
+                            error_msg = f"Syntax error at line {line_num}:\n{error_msg}"
+                    elif "module not found" in error_msg.lower():
+                        error_msg = f"Module not found error:\n{error_msg}"
+                    elif "port mismatch" in error_msg.lower():
+                        error_msg = f"Port connection mismatch:\n{error_msg}"
+                    elif "undefined variable" in error_msg.lower():
+                        error_msg = f"Undefined variable error:\n{error_msg}"
+                    elif "multiple drivers" in error_msg.lower():
+                        error_msg = f"Multiple drivers error:\n{error_msg}"
+                    else:
+                        # For any other error, include the full error message
+                        error_msg = f"Compilation error:\n{error_msg}"
+                    
+                    return False, output, ""
+                
+                # Check for warnings even if compilation succeeded
+                if compile_result.stderr:
+                    warning_msg = compile_result.stderr
+                    logger.warning(f"Compilation warnings: {warning_msg}")
+                    output += f"Compilation successful with warnings:\n{warning_msg}\n"
+                else:
+                    output += "Compilation successful\n"
                 
                 logger.debug("Compilation successful")
             except subprocess.TimeoutExpired:
                 logger.error("Compilation timed out")
-                return False, "Compilation timed out. The operation took too long to complete.", ""
+                output += "\nCompilation timed out. The operation took too long to complete. This might be due to complex code or system resource constraints."
+                return False, output, ""
             except Exception as e:
                 logger.error(f"Compilation error: {str(e)}")
-                return False, f"Compilation error: {str(e)}", ""
+                output += f"\nCompilation error: {str(e)}"
+                return False, output, ""
             
             # Run the simulation
             sim_cmd = ["vvp", "-M", "/usr/local/lib/ivl", os.path.join(temp_dir, "sim"), "-vcd", vcd_path]
@@ -106,17 +152,37 @@ class VerilogSimulator:
                     timeout=self.simulation_timeout
                 )
                 
+                # Always append both stdout and stderr to output
+                output += (sim_result.stdout or "")
+                output += (sim_result.stderr or "")
+                
+                # Check for simulation errors
                 if sim_result.returncode != 0:
-                    logger.error(f"Simulation failed: {sim_result.stderr}")
-                    return False, f"Simulation failed: {sim_result.stderr}", ""
+                    error_msg = sim_result.stderr
+                    # Parse common simulation errors
+                    if "timeout" in error_msg.lower():
+                        error_msg = "Simulation timed out. This might be due to an infinite loop or deadlock in your design."
+                    elif "stack overflow" in error_msg.lower():
+                        error_msg = "Stack overflow detected. This might be due to deep recursion or complex nested structures."
+                    elif "memory" in error_msg.lower():
+                        error_msg = "Memory allocation error. The simulation might be too complex for the available system resources."
+                    elif "assertion" in error_msg.lower():
+                        error_msg = f"Assertion failure in simulation:\n{error_msg}"
+                    return False, output, ""
+                
+                # Add simulation warnings to output if any
+                if sim_result.stderr:
+                    output += f"\nSimulation warnings:\n{sim_result.stderr}"
                 
                 logger.debug("Simulation successful")
             except subprocess.TimeoutExpired:
                 logger.error("Simulation timed out")
-                return False, "Simulation timed out. The operation took too long to complete.", ""
+                output += "\nSimulation timed out. The operation took too long to complete. This might be due to an infinite loop or complex simulation."
+                return False, output, ""
             except Exception as e:
                 logger.error(f"Simulation error: {str(e)}")
-                return False, f"Simulation error: {str(e)}", ""
+                output += f"\nSimulation error: {str(e)}"
+                return False, output, ""
             
             # Check if the VCD file was generated
             if not os.path.exists(vcd_path):
@@ -147,7 +213,7 @@ class VerilogSimulator:
                 return False, f"Error reading VCD file: {str(e)}", ""
             
             # Return the simulation results
-            return True, sim_result.stdout, vcd_content
+            return True, output, vcd_content
             
         except Exception as e:
             logger.error(f"Error in compile_and_simulate: {str(e)}")

@@ -120,7 +120,12 @@ async def simulate_verilog(request: SimulationRequest):
         )
         
         if not success:
-            raise HTTPException(status_code=400, detail=output)
+            # Return error response with proper structure
+            return SimulationResponse(
+                success=False,
+                output=output,
+                waveform_data=""
+            )
             
         return SimulationResponse(
             success=success,
@@ -131,7 +136,11 @@ async def simulate_verilog(request: SimulationRequest):
         logger.error(f"Error in simulation: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Simulation error: {str(e)}")
+        return SimulationResponse(
+            success=False,
+            output=f"Simulation error: {str(e)}",
+            waveform_data=""
+        )
 
 # Global exception handler
 @app.exception_handler(Exception)

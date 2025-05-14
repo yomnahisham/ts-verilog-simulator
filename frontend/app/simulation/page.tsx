@@ -12,7 +12,7 @@ interface File {
   content: string;
 }
 
-// Backend configuration-> make it 'https://localhost:8001' when running locally
+// Backend configuration-> make it 'http://localhost:8001' when running locally
 const BACKEND_BASE_URL = 'https://ts-verilog-simulator-backend.onrender.com';
 const BACKEND_API_URL = `${BACKEND_BASE_URL}/api/v1`;
 const USE_REAL_SIMULATION = true; // Flag to use real simulation instead of mock data
@@ -86,9 +86,155 @@ const editorOptions = {
   },
 };
 
+// Add these new functions before the formatError function
+const parseErrors = (msg: string): string => {
+  // First, try to parse the response if it's JSON
+  let errorData;
+  try {
+    errorData = JSON.parse(msg);
+    if (errorData.detail) {
+      msg = errorData.detail;
+    } else if (errorData.output) {
+      msg = errorData.output;
+    }
+  } catch (e) {
+    // If not JSON, use the message as is
+  }
+
+  // Split into lines and filter empty lines
+  const errorLines = msg.split('\n').filter(line => line.trim());
+  
+  // Group errors by file
+  const fileErrors: Record<string, string[]> = {};
+  const otherErrors: string[] = [];
+
+  errorLines.forEach(line => {
+    // Remove temp file paths and clean up the message
+    const cleanLine = line.replace(/\/?[\w\d\-\/]*\/T\/tmp[^/]+\//g, '');
+    
+    // Match the error pattern: filename:line: message
+    const match = cleanLine.match(/(\w+\.v):(\d+):\s*(.*)/);
+    if (match) {
+      const [_, file, lineNum, text] = match;
+      const errorText = text.trim();
+      
+      if (!fileErrors[file]) {
+        fileErrors[file] = [];
+      }
+      
+      // Check if this is a reference to another line
+      if (errorText.includes('It was declared here')) {
+        // Add this as additional context to the previous error
+        const prevError = fileErrors[file][fileErrors[file].length - 1];
+        if (prevError) {
+          fileErrors[file][fileErrors[file].length - 1] = `${prevError}\n    ${errorText}`;
+        } else {
+          fileErrors[file].push(`Line ${lineNum}: ${errorText}`);
+        }
+      } else {
+        // Remove duplicate file references in the error message
+        const cleanErrorText = errorText.replace(/(\w+\.v):(\d+):/g, '');
+        fileErrors[file].push(`Line ${lineNum}: ${cleanErrorText}`);
+      }
+    } else if (cleanLine.trim()) {
+      otherErrors.push(cleanLine.trim());
+    }
+  });
+
+  // Format the errors by file
+  let formattedErrors = '';
+  
+  // First, show file-specific errors
+  Object.entries(fileErrors).forEach(([file, errors]) => {
+    if (errors.length > 0) {
+      formattedErrors += `${file} Errors:\n`;
+      errors.forEach(error => {
+        formattedErrors += `  ${error}\n`;
+      });
+      formattedErrors += '\n';
+    }
+  });
+
+  // Then show other errors if any
+  if (otherErrors.length > 0) {
+    formattedErrors += 'Other Errors:\n';
+    otherErrors.forEach(error => {
+      formattedErrors += `  ${error}\n`;
+    });
+  }
+
+  return formattedErrors.trim() || 'No errors found.';
+};
+
+const parseWarnings = (msg: string): string => {
+  // Remove temp file paths and clean up the message
+  msg = msg.replace(/\/?[\w\d\-\/]*\/T\/tmp[^/]+\//g, '');
+  msg = msg.replace(/(\w+\.v):(\d+):\s*(\w+\.v):(\d+):/g, '$1:$2:');
+  msg = msg.replace(/warning:\s*/g, '');
+  msg = msg.replace(/(\w+\.v):(\d+):\s*/g, '$1:$2: ');
+
+  // Split into lines and filter empty lines
+  const warningLines = msg.split('\n').filter(line => line.trim());
+  
+  // Group warnings by type
+  const warningGroups: Record<string, string[]> = {
+    'Timing Warnings': [],
+    'Synthesis Warnings': [],
+    'Simulation Warnings': [],
+    'Other Warnings': []
+  };
+
+  warningLines.forEach(line => {
+    const match = line.match(/(\w+\.v):(\d+):\s*(.*)/);
+    if (match) {
+      const [_, file, lineNum, text] = match;
+      const warningText = text.trim();
+      
+      if (/timing|delay|clock/i.test(warningText)) {
+        warningGroups['Timing Warnings'].push(`${file} Line ${lineNum}: ${warningText}`);
+      } else if (/synthesis|optimization/i.test(warningText)) {
+        warningGroups['Synthesis Warnings'].push(`${file} Line ${lineNum}: ${warningText}`);
+      } else if (/simulation|runtime/i.test(warningText)) {
+        warningGroups['Simulation Warnings'].push(`${file} Line ${lineNum}: ${warningText}`);
+      } else {
+        warningGroups['Other Warnings'].push(`${file} Line ${lineNum}: ${warningText}`);
+      }
+    } else if (line.trim()) {
+      warningGroups['Other Warnings'].push(line.trim());
+    }
+  });
+
+  // Format the grouped warnings
+  let formattedWarnings = '';
+  Object.entries(warningGroups).forEach(([group, warnings]) => {
+    if (warnings.length > 0) {
+      formattedWarnings += `${group}:\n`;
+      warnings.forEach(warning => {
+        formattedWarnings += `  ${warning}\n`;
+      });
+      formattedWarnings += '\n';
+    }
+  });
+
+  return formattedWarnings.trim() || 'No warnings found.';
+};
+
 // Place formatError at the top of the file so it is in scope everywhere
 const formatError = (msg: string): string => {
-  // Remove all temp file paths from anywhere in the message
+  // First, try to parse the response if it's JSON
+  let errorData;
+  try {
+    errorData = JSON.parse(msg);
+    if (errorData.detail) {
+      msg = errorData.detail;
+    } else if (errorData.output) {
+      msg = errorData.output;
+    }
+  } catch (e) {
+    // If not JSON, use the message as is
+  }
+
+  // Remove temp file paths and clean up the message
   msg = msg.replace(/\/?[\w\d\-\/]*\/T\/tmp[^/]+\//g, '');
   msg = msg.replace(/(\w+\.v):(\d+):\s*(\w+\.v):(\d+):/g, '$1:$2:');
   msg = msg.replace(/I give up\./g, '');
@@ -97,69 +243,51 @@ const formatError = (msg: string): string => {
   msg = msg.replace(/syntax error\s*/g, '');
   msg = msg.replace(/(\w+\.v):(\d+):\s*/g, '$1:$2: ');
 
-  // Group errors by file and line
+  // Split into lines and filter empty lines
   const errorLines = msg.split('\n').filter(line => line.trim());
-  type ErrorObj = { file: string, line: number, text: string };
-  let lastFile = '';
-  let lastLine = 0;
-  let lastErrorObj: ErrorObj | null = null;
-  const allErrors: ErrorObj[] = [];
+  
+  // Group errors by file and type
+  const fileErrors: Record<string, string[]> = {};
+  const otherErrors: string[] = [];
+
   errorLines.forEach(line => {
     const match = line.match(/(\w+\.v):(\d+):\s*(.*)/);
     if (match) {
       const [_, file, lineNum, text] = match;
-      lastFile = file;
-      lastLine = parseInt(lineNum);
-      let cleanText = text.trim();
-      if (!cleanText || cleanText === ':') {
-        lastErrorObj = null;
-        return;
+      const errorText = text.trim();
+      
+      if (!fileErrors[file]) {
+        fileErrors[file] = [];
       }
-      const errorObj = { file, line: lastLine, text: cleanText };
-      allErrors.push(errorObj);
-      lastErrorObj = errorObj;
-    } else {
-      const refMatch = line.match(/^\s*:(.*)/);
-      if (refMatch && lastErrorObj) {
-        const refText = refMatch[1].trim();
-        lastErrorObj.text += ' (Reference: ' + refText + ')';
+      fileErrors[file].push(`Line ${lineNum}: ${errorText}`);
       } else if (line.trim()) {
-        allErrors.push({ file: 'Other', line: 0, text: line.trim() });
-      }
+      otherErrors.push(line.trim());
     }
   });
 
-  // Group errors by type
-  const groups: Record<string, ErrorObj[]> = {
-    'Syntax Errors': [],
-    'Declaration Errors': [],
-    'Instantiation Errors': [],
-    'Other Errors': []
-  };
-  allErrors.forEach(e => {
-    if (/syntax error|Syntax error/i.test(e.text)) {
-      groups['Syntax Errors'].push(e);
-    } else if (/already been declared|was declared here/i.test(e.text)) {
-      groups['Declaration Errors'].push(e);
-    } else if (/Invalid module instantiation/i.test(e.text)) {
-      groups['Instantiation Errors'].push(e);
-    } else {
-      groups['Other Errors'].push(e);
-    }
-  });
-
-  // Format grouped errors
-  let formattedMsg = '';
-  Object.entries(groups).forEach(([group, arr]) => {
-    if (arr.length > 0) {
-      formattedMsg += `${group}:\n`;
-      arr.sort((a, b) => (a.file + a.line).localeCompare(b.file + b.line)).forEach(e => {
-        formattedMsg += `  ${e.file} Line ${e.line}: ${e.text}\n`;
+  // Format the errors by file
+  let formattedErrors = '';
+  
+  // First, show file-specific errors
+  Object.entries(fileErrors).forEach(([file, errors]) => {
+    if (errors.length > 0) {
+      formattedErrors += `${file} Errors:\n`;
+      errors.forEach(error => {
+        formattedErrors += `  ${error}\n`;
       });
-      formattedMsg += '\n';
+      formattedErrors += '\n';
     }
   });
-  return formattedMsg.trim() || 'No errors found.';
+
+  // Then show other errors if any
+  if (otherErrors.length > 0) {
+    formattedErrors += 'Other Errors:\n';
+    otherErrors.forEach(error => {
+      formattedErrors += `  ${error}\n`;
+      });
+  }
+
+  return formattedErrors.trim() || 'No errors found.';
 };
 
 export default function SimulationPage() {
@@ -692,70 +820,161 @@ export default function SimulationPage() {
         }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        // Ensure we have a string error message
         let errorMessage: string;
-        if (response.status === 422) {
-          // Handle validation errors
-          const validationErrors = data.detail || [];
-          if (Array.isArray(validationErrors)) {
-            errorMessage = validationErrors.map(err => err.msg || err.message || err).join('\n');
-          } else if (typeof validationErrors === 'object') {
-            errorMessage = Object.entries(validationErrors)
-              .map(([field, msg]) => `${field}: ${msg}`)
-              .join('\n');
-          } else {
-            errorMessage = String(validationErrors);
-          }
-        } else {
-          errorMessage = String(data.output || data.detail || `HTTP error! status: ${response.status}`);
-        }
         
-        // Map error keywords to their types
-        const errorTypeMap: Record<string, 'warning' | 'compilation' | 'simulation' | 'system'> = {
-          'warning': 'warning',
-          'compilation': 'compilation',
-          'simulation': 'simulation',
-          'validation': 'system'
-        };
+        try {
+          const errorData = await response.json();
+          console.log('Raw error response:', errorData); // Debug log
+          
+          // Get the raw simulation output from the response
+          if (errorData.detail) {
+            if (typeof errorData.detail === 'object' && errorData.detail.full_output) {
+              errorMessage = errorData.detail.full_output;
+            } else {
+              errorMessage = errorData.detail;
+            }
+          } else if (errorData.output) {
+            errorMessage = errorData.output;
+          } else if (typeof errorData === 'string') {
+            errorMessage = errorData;
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          } else {
+            errorMessage = `HTTP error! status: ${response.status}`;
+          }
 
-        // Find the first matching error type or default to 'system'
-        const errorType = Object.entries(errorTypeMap).find(([key]) => 
-          errorMessage.toLowerCase().includes(key)
-        )?.[1] || 'system';
+          // Clean up the error message before formatting
+          errorMessage = errorMessage
+            .replace(/\/?[\w\d\-\/]*\/T\/tmp[^/]+\//g, '') // Remove temp file paths
+            .replace(/(\w+\.v):(\d+):\s*(\w+\.v):(\d+):/g, '$1:$2:') // Remove duplicate file references
+            .replace(/I give up\./g, '')
+            .replace(/\[object Object\]/g, 'Invalid input')
+            .replace(/error:\s*/g, '')
+            .replace(/syntax error\s*/g, '')
+            .replace(/(\w+\.v):(\d+):\s*/g, '$1:$2: ');
 
-        // Format error message to be more user-friendly
-        const formattedError = formatError(errorMessage);
-        setErrorType(errorType);
+          // Format the error message using parseErrors
+          const formattedErrors = parseErrors(errorMessage);
+          const formattedWarnings = parseWarnings(errorMessage);
+
+          // Set the error states with the formatted messages
+          setErrorType('compilation');
+          setError('Simulation failed');
+          setErrorDetails(formattedErrors);
+          setErrorOutput(formattedErrors);
+          setWarningOutput(formattedWarnings);
+          setSimulationOutput(formattedErrors); // Use formatted errors in simulation output
+          setLogOutput(errorMessage);
+
+          throw new Error(formattedErrors);
+        } catch (e) {
+          console.error('Error parsing response:', e);
+          errorMessage = `HTTP error! status: ${response.status}`;
+          
+          // Clean up the error message before formatting
+          errorMessage = errorMessage
+            .replace(/\/?[\w\d\-\/]*\/T\/tmp[^/]+\//g, '')
+            .replace(/(\w+\.v):(\d+):\s*(\w+\.v):(\d+):/g, '$1:$2:')
+          .replace(/I give up\./g, '')
+          .replace(/\[object Object\]/g, 'Invalid input')
+          .replace(/error:\s*/g, '')
+          .replace(/syntax error\s*/g, '')
+          .replace(/(\w+\.v):(\d+):\s*/g, '$1:$2: ');
+
+          // Format the error message even for HTTP errors
+          const formattedErrors = parseErrors(errorMessage);
+          const formattedWarnings = parseWarnings(errorMessage);
+
+          // Set the error states with the formatted messages
+        setErrorType('compilation');
         setError('Simulation failed');
-        setErrorDetails(formattedError);
-        setErrorOutput(formattedError);
-        // Always show backend output in Output tab, even on error
-        const backendOutput = data.output || errorMessage || formattedError;
-        setSimulationOutput(backendOutput);
-        // Always show log entries if present
-        let logRaw = data.log || backendOutput;
-        const logLines = logRaw.split('\n').filter((line: string) => line.startsWith('INFO:') || line.startsWith('DEBUG:'));
-        const formattedLog = logLines.map((line: string) => {
-          if (line.startsWith('INFO:')) return `[INFO]  ${line.replace('INFO:', '').trim()}`;
-          if (line.startsWith('DEBUG:')) return `[DEBUG] ${line.replace('DEBUG:', '').trim()}`;
-          return line;
-        }).join('\n');
-        setLogOutput(formattedLog || 'No log entries found');
-        throw new Error(formattedError);
+        setErrorDetails(formattedErrors);
+        setErrorOutput(formattedErrors);
+          setWarningOutput(formattedWarnings);
+          setSimulationOutput(formattedErrors); // Use formatted errors in simulation output
+          setLogOutput(errorMessage);
+
+        throw new Error(formattedErrors);
+        }
       }
 
+      // Process successful response
+      const data = await response.json();
+      
       // Process the simulation output
       const output = data.output || '';
-      // For log: show the full raw backend output (all lines, including debug/info/errors)
+      
+      // Clean up the output before processing
+      const cleanOutput = output
+        .replace(/\/?[\w\d\-\/]*\/T\/tmp[^/]+\//g, '') // Remove temp file paths
+        .replace(/(\w+\.v):(\d+):\s*(\w+\.v):(\d+):/g, '$1:$2:') // Remove duplicate file references
+        .replace(/I give up\./g, '')
+        .replace(/\[object Object\]/g, 'Invalid input')
+        .replace(/error:\s*/g, '')
+        .replace(/syntax error\s*/g, '')
+        .replace(/(\w+\.v):(\d+):\s*/g, '$1:$2: ');
+
+      // Check for errors in the output
+      const hasErrors = cleanOutput.toLowerCase().includes('error') || 
+                       cleanOutput.toLowerCase().includes('syntax error') ||
+                       cleanOutput.toLowerCase().includes('invalid module') ||
+                       cleanOutput.toLowerCase().includes('undefined variable') ||
+                       cleanOutput.toLowerCase().includes('port mismatch');
+
+      if (hasErrors) {
+        const formattedErrors = parseErrors(cleanOutput);
+        setErrorOutput(formattedErrors);
+        setSimulationOutput(formattedErrors);
+        setActiveOutputTab('errors');
+        setWaveformData(null); // Clear waveform data when there are errors
+        return;
+      }
+
+      // Split the output into simulation output and warnings
+      const lines = cleanOutput.split('\n');
+      const simulationLines: string[] = [];
+      const warningLines: string[] = [];
+      let isSimulationOutput = false;
+
+      for (const line of lines) {
+        if (line.toLowerCase().includes('compilation successful')) {
+          isSimulationOutput = true;
+          continue;
+        }
+        if (line.toLowerCase().includes('warning:')) {
+          warningLines.push(line);
+        } else if (isSimulationOutput) {
+          simulationLines.push(line);
+        }
+      }
+
+      // Format warnings
+      const formattedWarnings = warningLines.length > 0 ? warningLines.join('\n') : 'No warnings found.';
+      setWarningOutput(formattedWarnings);
+
+      // Set simulation output
+      const simulationOutput = simulationLines.join('\n').trim();
+      setSimulationOutput(simulationOutput);
+
+      // Set the active tab based on content
+      if (simulationOutput) {
+        setActiveOutputTab('output');
+      } else if (warningLines.length > 0) {
+        setActiveOutputTab('warnings');
+      }
+
+      // Update waveform data if available
+      if (data.waveform_data) {
+        setWaveformData(data.waveform_data);
+      }
+
+      // For log: show the full raw backend output
       let logRaw = '';
       if (data.log) {
         logRaw = data.log;
       } else {
-        // If backend does not provide a log field, use the full output
-        logRaw = output;
+        logRaw = cleanOutput;
       }
 
       // Enhanced log processing
@@ -768,23 +987,33 @@ export default function SimulationPage() {
       let simulationStartTime = '';
       let totalTime = '';
       
-      logLines.forEach(line => {
+      logLines.forEach((line: string) => {
         // Skip empty lines
         if (!line.trim()) return;
         
+        // Clean up the line
+        const cleanLine = line
+          .replace(/\/?[\w\d\-\/]*\/T\/tmp[^/]+\//g, '')
+          .replace(/(\w+\.v):(\d+):\s*(\w+\.v):(\d+):/g, '$1:$2:')
+          .replace(/I give up\./g, '')
+          .replace(/\[object Object\]/g, 'Invalid input')
+          .replace(/error:\s*/g, '')
+          .replace(/syntax error\s*/g, '')
+          .replace(/(\w+\.v):(\d+):\s*/g, '$1:$2: ');
+        
         // Process compilation stage
-        if (line.toLowerCase().includes('compiling') || line.toLowerCase().includes('elaborating')) {
+        if (cleanLine.toLowerCase().includes('compiling') || cleanLine.toLowerCase().includes('elaborating')) {
           currentStage = 'Compilation';
           compilationStartTime = new Date().toLocaleTimeString();
           processedLogs.push(`[${compilationStartTime}] [COMPILE] Starting compilation...`);
           processedLogs.push(`[${compilationStartTime}] [MODULE] Processing module: ${selectedTopModule}`);
-          if (line.toLowerCase().includes('elaborating')) {
+          if (cleanLine.toLowerCase().includes('elaborating')) {
             processedLogs.push(`[${compilationStartTime}] [HIERARCHY] Elaborating design hierarchy...`);
           }
         }
         
         // Process simulation stage
-        else if (line.toLowerCase().includes('simulation') || line.toLowerCase().includes('running')) {
+        else if (cleanLine.toLowerCase().includes('simulation') || cleanLine.toLowerCase().includes('running')) {
           currentStage = 'Simulation';
           simulationStartTime = new Date().toLocaleTimeString();
           processedLogs.push(`[${simulationStartTime}] [SIM] Starting simulation...`);
@@ -792,63 +1021,63 @@ export default function SimulationPage() {
         }
         
         // Process VCD generation
-        else if (line.toLowerCase().includes('vcd') || line.toLowerCase().includes('dumpfile')) {
+        else if (cleanLine.toLowerCase().includes('vcd') || cleanLine.toLowerCase().includes('dumpfile')) {
           processedLogs.push(`[${new Date().toLocaleTimeString()}] [WAVEFORM] Generating waveform data...`);
         }
         
         // Process timing information
-        else if (line.toLowerCase().includes('time') || line.toLowerCase().includes('elapsed')) {
+        else if (cleanLine.toLowerCase().includes('time') || cleanLine.toLowerCase().includes('elapsed')) {
           // Only treat as timing if it's actually a timing message
-          if (line.toLowerCase().includes('elapsed') || 
-              line.toLowerCase().includes('seconds') || 
-              line.toLowerCase().includes('simulation time')) {
-            totalTime = line.trim();
+          if (cleanLine.toLowerCase().includes('elapsed') || 
+              cleanLine.toLowerCase().includes('seconds') || 
+              cleanLine.toLowerCase().includes('simulation time')) {
+            totalTime = cleanLine.trim();
             processedLogs.push(`[${new Date().toLocaleTimeString()}] [TIME] ${totalTime}`);
           } else {
             // This is likely simulation output, add it as is
-            processedLogs.push(`[${new Date().toLocaleTimeString()}] [OUTPUT] ${line.trim()}`);
+            processedLogs.push(`[${new Date().toLocaleTimeString()}] [OUTPUT] ${cleanLine.trim()}`);
           }
         }
         
         // Process simulation output (like $monitor statements)
-        else if (line.includes('|') || line.includes('$monitor') || line.includes('$display')) {
-          processedLogs.push(`[${new Date().toLocaleTimeString()}] [OUTPUT] ${line.trim()}`);
+        else if (cleanLine.includes('|') || cleanLine.includes('$monitor') || cleanLine.includes('$display')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [OUTPUT] ${cleanLine.trim()}`);
         }
         
         // Process finish statements
-        else if (line.toLowerCase().includes('$finish')) {
-          processedLogs.push(`[${new Date().toLocaleTimeString()}] [FINISH] ${line.trim()}`);
+        else if (cleanLine.toLowerCase().includes('$finish')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [FINISH] ${cleanLine.trim()}`);
         }
         
         // Process important status messages
-        else if (line.toLowerCase().includes('success') || line.toLowerCase().includes('complete')) {
-          const status = line.toLowerCase().includes('success') ? '[SUCCESS]' : '[COMPLETE]';
-          processedLogs.push(`[${new Date().toLocaleTimeString()}] ${status} ${line.trim()}`);
+        else if (cleanLine.toLowerCase().includes('success') || cleanLine.toLowerCase().includes('complete')) {
+          const status = cleanLine.toLowerCase().includes('success') ? '[SUCCESS]' : '[COMPLETE]';
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] ${status} ${cleanLine.trim()}`);
         }
         
         // Process warnings
-        else if (line.toLowerCase().includes('warning')) {
-          processedLogs.push(`[${new Date().toLocaleTimeString()}] [WARNING] ${line.trim()}`);
+        else if (cleanLine.toLowerCase().includes('warning')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [WARNING] ${cleanLine.trim()}`);
         }
         
         // Process errors
-        else if (line.toLowerCase().includes('error')) {
-          processedLogs.push(`[${new Date().toLocaleTimeString()}] [ERROR] ${line.trim()}`);
+        else if (cleanLine.toLowerCase().includes('error')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [ERROR] ${cleanLine.trim()}`);
         }
         
         // Process debug information
-        else if (line.startsWith('DEBUG:')) {
-          processedLogs.push(`[${new Date().toLocaleTimeString()}] [DEBUG] ${line.replace('DEBUG:', '').trim()}`);
+        else if (cleanLine.startsWith('DEBUG:')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [DEBUG] ${cleanLine.replace('DEBUG:', '').trim()}`);
         }
         
         // Process info messages
-        else if (line.startsWith('INFO:')) {
-          processedLogs.push(`[${new Date().toLocaleTimeString()}] [INFO] ${line.replace('INFO:', '').trim()}`);
+        else if (cleanLine.startsWith('INFO:')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [INFO] ${cleanLine.replace('INFO:', '').trim()}`);
         }
         
         // Add any other relevant information
-        else if (line.toLowerCase().includes('module') || line.toLowerCase().includes('testbench')) {
-          processedLogs.push(`[${new Date().toLocaleTimeString()}] [MODULE] ${line.trim()}`);
+        else if (cleanLine.toLowerCase().includes('module') || cleanLine.toLowerCase().includes('testbench')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [MODULE] ${cleanLine.trim()}`);
         }
       });
       
@@ -870,48 +1099,11 @@ export default function SimulationPage() {
       // Update the log output with the processed logs
       setLogOutput(processedLogs.join('\n'));
 
-      const lines = output.split('\n');
-      
-      // Categorize the output
-      const errors: string[] = [];
-      const warnings: string[] = [];
-      const logs: string[] = [];
-      const reports: string[] = [];
-      
-      lines.forEach((line: string) => {
-        if (line.toLowerCase().includes('error')) {
-          errors.push(line);
-        } else if (line.toLowerCase().includes('warning')) {
-          warnings.push(line);
-        } else if (line.toLowerCase().includes('time') || 
-                  line.toLowerCase().includes('simulation') || 
-                  line.toLowerCase().includes('running') || 
-                  line.toLowerCase().includes('compiling') || 
-                  line.toLowerCase().includes('elaborating')) {
-          logs.push(line);
-        } else if (line.toLowerCase().includes('summary') || 
-                  line.toLowerCase().includes('statistics') || 
-                  line.toLowerCase().includes('results') || 
-                  line.toLowerCase().includes('total') || 
-                  line.toLowerCase().includes('passed') || 
-                  line.toLowerCase().includes('failed')) {
-          reports.push(line);
-        } else {
-          logs.push(line); // Default to logs for other output
-        }
-      });
-      
-      // Update the output states
-      setErrorOutput(errors.join('\n'));
-      setWarningOutput(warnings.join('\n'));
-      setLogOutput(processedLogs.join('\n'));
-      setSimulationOutput(output); // Set the full output in the simulation output tab
-
       // Generate a summary for the Report tab
-      const errorCount = errors.length;
-      const warningCount = warnings.length;
-      const compilationSucceeded = errorCount === 0 && output.toLowerCase().includes('compilation successful');
-      const vcdGenerated = output.toLowerCase().includes('vcd') || output.toLowerCase().includes('dumpfile');
+      const errorCount = errorOutput.split('\n').filter((line: string) => line.trim() && !line.includes('Errors:')).length;
+      const warningCount = warningOutput.split('\n').filter((line: string) => line.trim() && !line.includes('Warnings:')).length;
+      const compilationSucceeded = !hasErrors;
+      const vcdGenerated = cleanOutput.toLowerCase().includes('vcd') || cleanOutput.toLowerCase().includes('dumpfile');
       const reportTopModule = topModule || selectedTopModule;
       const reportTopTestbench = topTestbench || selectedTopTestbench;
       let suggestion = '';
@@ -928,26 +1120,23 @@ export default function SimulationPage() {
       setReportOutput(reportSummary);
       
       // Set the active tab based on content
-      if (errors.length > 0) {
+      if (errorCount > 0) {
         setActiveOutputTab('errors');
-      } else if (warnings.length > 0) {
+      } else if (warningCount > 0) {
         setActiveOutputTab('warnings');
       } else {
         setActiveOutputTab('output');
       }
 
-      // Update waveform data if available
-      if (data.waveform_data) {
-        setWaveformData(data.waveform_data);
-      }
-
     } catch (error) {
       console.error('Simulation error:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const formattedError = formatError(errorMessage);
+      const formattedErrors = parseErrors(errorMessage);
+      const formattedWarnings = parseWarnings(errorMessage);
       // Always show backend output in Output tab, even on error
       setSimulationOutput(errorMessage);
-      setErrorOutput(formattedError);
+      setErrorOutput(formattedErrors);
+      setWarningOutput(formattedWarnings);
       // Always show log entries if present
       let logRaw = errorMessage;
       const logLines = logRaw.split('\n').filter((line: string) => line.startsWith('INFO:') || line.startsWith('DEBUG:'));
@@ -1270,7 +1459,7 @@ export default function SimulationPage() {
                       onClick={() => setActiveOutputTab('errors')}
                       className={`px-4 py-2 text-sm font-medium transition-colors duration-150
                         ${activeOutputTab === 'errors' ? 'border-b-2 border-red-500' : ''}
-                        ${errorOutput && errorOutput.trim() && errorOutput !== 'No errors found.'
+                        ${errorOutput && errorOutput.trim() && errorOutput !== 'No errors found.' && errorOutput !== 'No errors found'
                           ? 'text-red-500'
                           : activeOutputTab === 'errors'
                             ? 'text-red-400'
@@ -1278,7 +1467,7 @@ export default function SimulationPage() {
                       `}
                     >
                       <span className="flex items-center">
-                        {errorOutput && errorOutput.trim() && errorOutput !== 'No errors found.' ? (
+                        {errorOutput && errorOutput.trim() && errorOutput !== 'No errors found.' && errorOutput !== 'No errors found' ? (
                           <span className="mr-2 text-red-500 font-bold">&#33;</span>
                         ) : (
                           <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1294,7 +1483,7 @@ export default function SimulationPage() {
                       onClick={() => setActiveOutputTab('warnings')}
                       className={`px-4 py-2 text-sm font-medium transition-colors duration-150
                         ${activeOutputTab === 'warnings' ? 'border-b-2 border-yellow-500' : ''}
-                        ${warningOutput && warningOutput.trim() && warningOutput !== 'No warnings found'
+                        ${warningOutput && warningOutput.trim() && warningOutput !== 'No warnings found' && warningOutput !== 'No warnings found.'
                           ? 'text-yellow-500'
                           : activeOutputTab === 'warnings'
                             ? 'text-yellow-400'
@@ -1302,7 +1491,7 @@ export default function SimulationPage() {
                       `}
                     >
                       <span className="flex items-center">
-                        {warningOutput && warningOutput.trim() && warningOutput !== 'No warnings found' ? (
+                        {warningOutput && warningOutput.trim() && warningOutput !== 'No warnings found' && warningOutput !== 'No warnings found.' ? (
                           <span className="mr-2 text-yellow-500 font-bold">&#33;</span>
                         ) : (
                           <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1375,7 +1564,7 @@ export default function SimulationPage() {
                               </svg>
               </div>
                             <div className="ml-3 bg-[#1e1e1e] rounded p-2 overflow-auto max-h-full w-full text-xs border border-red-700">
-                              <pre className="whitespace-pre-wrap text-xs leading-snug">{errorOutput}</pre>
+                              <pre className="whitespace-pre-wrap text-xs leading-snug font-mono">{errorOutput}</pre>
                             </div>
                           </div>
                         ) : (
