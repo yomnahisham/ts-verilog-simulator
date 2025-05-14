@@ -13,7 +13,7 @@ interface File {
 }
 
 // Backend configuration
-const BACKEND_BASE_URL = 'https://ts-verilog-simulator-backend.onrender.com';
+const BACKEND_BASE_URL = 'http://localhost:8001';
 const BACKEND_API_URL = `${BACKEND_BASE_URL}/api/v1`;
 const USE_REAL_SIMULATION = true; // Flag to use real simulation instead of mock data
 
@@ -86,6 +86,82 @@ const editorOptions = {
   },
 };
 
+// Place formatError at the top of the file so it is in scope everywhere
+const formatError = (msg: string): string => {
+  // Remove all temp file paths from anywhere in the message
+  msg = msg.replace(/\/?[\w\d\-\/]*\/T\/tmp[^/]+\//g, '');
+  msg = msg.replace(/(\w+\.v):(\d+):\s*(\w+\.v):(\d+):/g, '$1:$2:');
+  msg = msg.replace(/I give up\./g, '');
+  msg = msg.replace(/\[object Object\]/g, 'Invalid input');
+  msg = msg.replace(/error:\s*/g, '');
+  msg = msg.replace(/syntax error\s*/g, '');
+  msg = msg.replace(/(\w+\.v):(\d+):\s*/g, '$1:$2: ');
+
+  // Group errors by file and line
+  const errorLines = msg.split('\n').filter(line => line.trim());
+  type ErrorObj = { file: string, line: number, text: string };
+  let lastFile = '';
+  let lastLine = 0;
+  let lastErrorObj: ErrorObj | null = null;
+  const allErrors: ErrorObj[] = [];
+  errorLines.forEach(line => {
+    const match = line.match(/(\w+\.v):(\d+):\s*(.*)/);
+    if (match) {
+      const [_, file, lineNum, text] = match;
+      lastFile = file;
+      lastLine = parseInt(lineNum);
+      let cleanText = text.trim();
+      if (!cleanText || cleanText === ':') {
+        lastErrorObj = null;
+        return;
+      }
+      const errorObj = { file, line: lastLine, text: cleanText };
+      allErrors.push(errorObj);
+      lastErrorObj = errorObj;
+    } else {
+      const refMatch = line.match(/^\s*:(.*)/);
+      if (refMatch && lastErrorObj) {
+        const refText = refMatch[1].trim();
+        lastErrorObj.text += ' (Reference: ' + refText + ')';
+      } else if (line.trim()) {
+        allErrors.push({ file: 'Other', line: 0, text: line.trim() });
+      }
+    }
+  });
+
+  // Group errors by type
+  const groups: Record<string, ErrorObj[]> = {
+    'Syntax Errors': [],
+    'Declaration Errors': [],
+    'Instantiation Errors': [],
+    'Other Errors': []
+  };
+  allErrors.forEach(e => {
+    if (/syntax error|Syntax error/i.test(e.text)) {
+      groups['Syntax Errors'].push(e);
+    } else if (/already been declared|was declared here/i.test(e.text)) {
+      groups['Declaration Errors'].push(e);
+    } else if (/Invalid module instantiation/i.test(e.text)) {
+      groups['Instantiation Errors'].push(e);
+    } else {
+      groups['Other Errors'].push(e);
+    }
+  });
+
+  // Format grouped errors
+  let formattedMsg = '';
+  Object.entries(groups).forEach(([group, arr]) => {
+    if (arr.length > 0) {
+      formattedMsg += `${group}:\n`;
+      arr.sort((a, b) => (a.file + a.line).localeCompare(b.file + b.line)).forEach(e => {
+        formattedMsg += `  ${e.file} Line ${e.line}: ${e.text}\n`;
+      });
+      formattedMsg += '\n';
+    }
+  });
+  return formattedMsg.trim() || 'No errors found.';
+};
+
 export default function SimulationPage() {
   // State for files
   const [files, setFiles] = useState<File[]>([
@@ -110,6 +186,8 @@ export default function SimulationPage() {
   const [waveformData, setWaveformData] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<'online' | 'offline' | 'checking'>('checking');
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<'compilation' | 'simulation' | 'system' | 'warning' | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
   const [showNewFileModal, setShowNewFileModal] = useState(false);
   const [showManualModuleInput, setShowManualModuleInput] = useState(false);
@@ -126,6 +204,12 @@ export default function SimulationPage() {
   const [manualTestbenchName, setManualTestbenchName] = useState('');
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
+  const [activeErrorTab, setActiveErrorTab] = useState<'errors' | 'warnings'>('errors');
+  const [activeOutputTab, setActiveOutputTab] = useState<'output' | 'errors' | 'warnings' | 'log' | 'report'>('output');
+  const [errorOutput, setErrorOutput] = useState<string>('');
+  const [warningOutput, setWarningOutput] = useState<string>('');
+  const [logOutput, setLogOutput] = useState<string>('');
+  const [reportOutput, setReportOutput] = useState<string>('');
 
   // Update time every second
   useEffect(() => {
@@ -520,15 +604,30 @@ export default function SimulationPage() {
     // Force a re-scan for modules before running simulation
     scanForModuleDeclarations();
     try {
+      // Reset error states
+      setError(null);
+      setErrorType(null);
+      setErrorDetails(null);
+      setErrorOutput('');
+      setWarningOutput('');
+      setLogOutput('');
+      setReportOutput('');
+      
       // Check if backend is available
       const isBackendAvailable = await checkBackendStatus();
       if (!isBackendAvailable) {
+        setError('Backend server is not available');
+        setErrorType('system');
+        setErrorDetails('Please make sure the backend server is running and try again.');
         setSimulationOutput('Error: Backend server is not available. Please make sure it is running.');
         return;
       }
 
       // Get module names
       if (!selectedTopModule || !selectedTopTestbench) {
+        setError('Missing module selection');
+        setErrorType('compilation');
+        setErrorDetails('Please select both a top module and a testbench module from the dropdowns.');
         setSimulationOutput('Error: Please select both a top module and a testbench module from the dropdowns.');
         return;
       }
@@ -539,10 +638,16 @@ export default function SimulationPage() {
       // Validate module names
       const isValidIdentifier = (name: string) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name);
       if (!isValidIdentifier(topModule)) {
+        setError('Invalid module name');
+        setErrorType('compilation');
+        setErrorDetails(`The top module name "${topModule}" is invalid. Module names must start with a letter or underscore and contain only letters, numbers, and underscores.`);
         setSimulationOutput(`Error: Invalid top module name "${topModule}". Module names must start with a letter or underscore and contain only letters, numbers, and underscores.`);
         return;
       }
       if (!isValidIdentifier(topTestbench)) {
+        setError('Invalid testbench name');
+        setErrorType('compilation');
+        setErrorDetails(`The testbench module name "${topTestbench}" is invalid. Module names must start with a letter or underscore and contain only letters, numbers, and underscores.`);
         setSimulationOutput(`Error: Invalid testbench module name "${topTestbench}". Module names must start with a letter or underscore and contain only letters, numbers, and underscores.`);
         return;
       }
@@ -562,6 +667,9 @@ export default function SimulationPage() {
       });
 
       if (!testbenchFile) {
+        setError('Testbench not found');
+        setErrorType('compilation');
+        setErrorDetails(`Could not find testbench module "${topTestbench}". Please ensure the file containing this module is open.`);
         setSimulationOutput(`Error: Could not find testbench module "${topTestbench}". Please ensure the file containing this module is open.`);
         return;
       }
@@ -584,22 +692,271 @@ export default function SimulationPage() {
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+        // Ensure we have a string error message
+        let errorMessage: string;
+        if (response.status === 422) {
+          // Handle validation errors
+          const validationErrors = data.detail || [];
+          if (Array.isArray(validationErrors)) {
+            errorMessage = validationErrors.map(err => err.msg || err.message || err).join('\n');
+          } else if (typeof validationErrors === 'object') {
+            errorMessage = Object.entries(validationErrors)
+              .map(([field, msg]) => `${field}: ${msg}`)
+              .join('\n');
+          } else {
+            errorMessage = String(validationErrors);
+          }
+        } else {
+          errorMessage = String(data.output || data.detail || `HTTP error! status: ${response.status}`);
+        }
+        
+        // Map error keywords to their types
+        const errorTypeMap: Record<string, 'warning' | 'compilation' | 'simulation' | 'system'> = {
+          'warning': 'warning',
+          'compilation': 'compilation',
+          'simulation': 'simulation',
+          'validation': 'system'
+        };
+
+        // Find the first matching error type or default to 'system'
+        const errorType = Object.entries(errorTypeMap).find(([key]) => 
+          errorMessage.toLowerCase().includes(key)
+        )?.[1] || 'system';
+
+        // Format error message to be more user-friendly
+        const formattedError = formatError(errorMessage);
+        setErrorType(errorType);
+        setError('Simulation failed');
+        setErrorDetails(formattedError);
+        setErrorOutput(formattedError);
+        // Always show backend output in Output tab, even on error
+        const backendOutput = data.output || errorMessage || formattedError;
+        setSimulationOutput(backendOutput);
+        // Always show log entries if present
+        let logRaw = data.log || backendOutput;
+        const logLines = logRaw.split('\n').filter((line: string) => line.startsWith('INFO:') || line.startsWith('DEBUG:'));
+        const formattedLog = logLines.map((line: string) => {
+          if (line.startsWith('INFO:')) return `[INFO]  ${line.replace('INFO:', '').trim()}`;
+          if (line.startsWith('DEBUG:')) return `[DEBUG] ${line.replace('DEBUG:', '').trim()}`;
+          return line;
+        }).join('\n');
+        setLogOutput(formattedLog || 'No log entries found');
+        throw new Error(formattedError);
       }
 
-      const data = await response.json();
-      
-      if (data.success) {
-        setSimulationOutput(data.output);
-        setWaveformData(data.waveform_data);
+      // Process the simulation output
+      const output = data.output || '';
+      // For log: show the full raw backend output (all lines, including debug/info/errors)
+      let logRaw = '';
+      if (data.log) {
+        logRaw = data.log;
       } else {
-        setSimulationOutput(`Simulation failed: ${data.output}`);
+        // If backend does not provide a log field, use the full output
+        logRaw = output;
       }
+
+      // Enhanced log processing
+      const logLines = logRaw.split('\n');
+      const processedLogs: string[] = [];
+      
+      // Track simulation stages
+      let currentStage = '';
+      let compilationStartTime = '';
+      let simulationStartTime = '';
+      let totalTime = '';
+      
+      logLines.forEach(line => {
+        // Skip empty lines
+        if (!line.trim()) return;
+        
+        // Process compilation stage
+        if (line.toLowerCase().includes('compiling') || line.toLowerCase().includes('elaborating')) {
+          currentStage = 'Compilation';
+          compilationStartTime = new Date().toLocaleTimeString();
+          processedLogs.push(`[${compilationStartTime}] [COMPILE] Starting compilation...`);
+          processedLogs.push(`[${compilationStartTime}] [MODULE] Processing module: ${selectedTopModule}`);
+          if (line.toLowerCase().includes('elaborating')) {
+            processedLogs.push(`[${compilationStartTime}] [HIERARCHY] Elaborating design hierarchy...`);
+          }
+        }
+        
+        // Process simulation stage
+        else if (line.toLowerCase().includes('simulation') || line.toLowerCase().includes('running')) {
+          currentStage = 'Simulation';
+          simulationStartTime = new Date().toLocaleTimeString();
+          processedLogs.push(`[${simulationStartTime}] [SIM] Starting simulation...`);
+          processedLogs.push(`[${simulationStartTime}] [TESTBENCH] Running testbench: ${selectedTopTestbench}`);
+        }
+        
+        // Process VCD generation
+        else if (line.toLowerCase().includes('vcd') || line.toLowerCase().includes('dumpfile')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [WAVEFORM] Generating waveform data...`);
+        }
+        
+        // Process timing information
+        else if (line.toLowerCase().includes('time') || line.toLowerCase().includes('elapsed')) {
+          // Only treat as timing if it's actually a timing message
+          if (line.toLowerCase().includes('elapsed') || 
+              line.toLowerCase().includes('seconds') || 
+              line.toLowerCase().includes('simulation time')) {
+            totalTime = line.trim();
+            processedLogs.push(`[${new Date().toLocaleTimeString()}] [TIME] ${totalTime}`);
+          } else {
+            // This is likely simulation output, add it as is
+            processedLogs.push(`[${new Date().toLocaleTimeString()}] [OUTPUT] ${line.trim()}`);
+          }
+        }
+        
+        // Process simulation output (like $monitor statements)
+        else if (line.includes('|') || line.includes('$monitor') || line.includes('$display')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [OUTPUT] ${line.trim()}`);
+        }
+        
+        // Process finish statements
+        else if (line.toLowerCase().includes('$finish')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [FINISH] ${line.trim()}`);
+        }
+        
+        // Process important status messages
+        else if (line.toLowerCase().includes('success') || line.toLowerCase().includes('complete')) {
+          const status = line.toLowerCase().includes('success') ? '[SUCCESS]' : '[COMPLETE]';
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] ${status} ${line.trim()}`);
+        }
+        
+        // Process warnings
+        else if (line.toLowerCase().includes('warning')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [WARNING] ${line.trim()}`);
+        }
+        
+        // Process errors
+        else if (line.toLowerCase().includes('error')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [ERROR] ${line.trim()}`);
+        }
+        
+        // Process debug information
+        else if (line.startsWith('DEBUG:')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [DEBUG] ${line.replace('DEBUG:', '').trim()}`);
+        }
+        
+        // Process info messages
+        else if (line.startsWith('INFO:')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [INFO] ${line.replace('INFO:', '').trim()}`);
+        }
+        
+        // Add any other relevant information
+        else if (line.toLowerCase().includes('module') || line.toLowerCase().includes('testbench')) {
+          processedLogs.push(`[${new Date().toLocaleTimeString()}] [MODULE] ${line.trim()}`);
+        }
+      });
+      
+      // Add summary if we have timing information
+      if (totalTime) {
+        processedLogs.push('\n=== Simulation Summary ===');
+        processedLogs.push(`Total Time: ${totalTime}`);
+        if (compilationStartTime) {
+          processedLogs.push(`Compilation Started: ${compilationStartTime}`);
+        }
+        if (simulationStartTime) {
+          processedLogs.push(`Simulation Started: ${simulationStartTime}`);
+        }
+        processedLogs.push(`Top Module: ${selectedTopModule}`);
+        processedLogs.push(`Testbench: ${selectedTopTestbench}`);
+        processedLogs.push('=======================\n');
+      }
+
+      // Update the log output with the processed logs
+      setLogOutput(processedLogs.join('\n'));
+
+      const lines = output.split('\n');
+      
+      // Categorize the output
+      const errors: string[] = [];
+      const warnings: string[] = [];
+      const logs: string[] = [];
+      const reports: string[] = [];
+      
+      lines.forEach((line: string) => {
+        if (line.toLowerCase().includes('error')) {
+          errors.push(line);
+        } else if (line.toLowerCase().includes('warning')) {
+          warnings.push(line);
+        } else if (line.toLowerCase().includes('time') || 
+                  line.toLowerCase().includes('simulation') || 
+                  line.toLowerCase().includes('running') || 
+                  line.toLowerCase().includes('compiling') || 
+                  line.toLowerCase().includes('elaborating')) {
+          logs.push(line);
+        } else if (line.toLowerCase().includes('summary') || 
+                  line.toLowerCase().includes('statistics') || 
+                  line.toLowerCase().includes('results') || 
+                  line.toLowerCase().includes('total') || 
+                  line.toLowerCase().includes('passed') || 
+                  line.toLowerCase().includes('failed')) {
+          reports.push(line);
+        } else {
+          logs.push(line); // Default to logs for other output
+        }
+      });
+      
+      // Update the output states
+      setErrorOutput(errors.join('\n'));
+      setWarningOutput(warnings.join('\n'));
+      setLogOutput(processedLogs.join('\n'));
+      setSimulationOutput(output); // Set the full output in the simulation output tab
+
+      // Generate a summary for the Report tab
+      const errorCount = errors.length;
+      const warningCount = warnings.length;
+      const compilationSucceeded = errorCount === 0 && output.toLowerCase().includes('compilation successful');
+      const vcdGenerated = output.toLowerCase().includes('vcd') || output.toLowerCase().includes('dumpfile');
+      const reportTopModule = topModule || selectedTopModule;
+      const reportTopTestbench = topTestbench || selectedTopTestbench;
+      let suggestion = '';
+      if (errorCount > 0) {
+        suggestion = 'Check the error messages above. Common issues include missing semicolons, undeclared signals, or invalid module instantiations.';
+      } else if (warningCount > 0) {
+        suggestion = 'Review the warnings for potential issues, but your code may still run.';
+      } else if (compilationSucceeded) {
+        suggestion = 'Simulation ran successfully!';
+      } else {
+        suggestion = 'Simulation completed.';
+      }
+      const reportSummary = `Simulation Report\n=================\n\nTop Module: ${reportTopModule}\nTestbench: ${reportTopTestbench}\n\nCompilation: ${compilationSucceeded ? 'Succeeded' : 'Failed'}\nVCD Generated: ${vcdGenerated ? 'Yes' : 'No'}\nErrors: ${errorCount}\nWarnings: ${warningCount}\n\n${suggestion}`;
+      setReportOutput(reportSummary);
+      
+      // Set the active tab based on content
+      if (errors.length > 0) {
+        setActiveOutputTab('errors');
+      } else if (warnings.length > 0) {
+        setActiveOutputTab('warnings');
+      } else {
+        setActiveOutputTab('output');
+      }
+
+      // Update waveform data if available
+      if (data.waveform_data) {
+        setWaveformData(data.waveform_data);
+      }
+
     } catch (error) {
       console.error('Simulation error:', error);
-      setSimulationOutput(`Error running simulation: ${error instanceof Error ? error.message : String(error)}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const formattedError = formatError(errorMessage);
+      // Always show backend output in Output tab, even on error
+      setSimulationOutput(errorMessage);
+      setErrorOutput(formattedError);
+      // Always show log entries if present
+      let logRaw = errorMessage;
+      const logLines = logRaw.split('\n').filter((line: string) => line.startsWith('INFO:') || line.startsWith('DEBUG:'));
+      const formattedLog = logLines.map((line: string) => {
+        if (line.startsWith('INFO:')) return `[INFO]  ${line.replace('INFO:', '').trim()}`;
+        if (line.startsWith('DEBUG:')) return `[DEBUG] ${line.replace('DEBUG:', '').trim()}`;
+        return line;
+      }).join('\n');
+      setLogOutput(formattedLog || 'No log entries found');
     }
   };
 
@@ -894,15 +1251,180 @@ export default function SimulationPage() {
           {/* Right panel: Simulation output and waveform */}
           <div className="w-1/2 flex flex-col">
             <div className="flex-1 overflow-hidden p-4">
-              <div className="mb-4 h-1/3">
+              <div className="mb-4 h-[40%] min-h-[200px] max-h-[350px] flex flex-col">
                 <h3 className="text-sm font-medium text-white mb-2">Simulation Output</h3>
-                <div className="bg-[#252526] rounded overflow-auto" style={{ height: 'calc(100% - 2rem)' }}>
-                  <pre className="p-4 text-sm text-gray-300 whitespace-pre-wrap">
-                    {simulationOutput || 'No simulation output yet'}
-                  </pre>
+                <div className="bg-[#252526] rounded flex-1 flex flex-col overflow-hidden">
+                  {/* Output Tabs */}
+                  <div className="flex border-b border-[#333]">
+                    <button
+                      onClick={() => setActiveOutputTab('output')}
+                      className={`px-4 py-2 text-sm font-medium ${
+                        activeOutputTab === 'output'
+                          ? 'border-b-2 border-blue-500 text-blue-400'
+                          : 'text-gray-400 hover:text-gray-300'
+                      }`}
+                    >
+                      Output
+                    </button>
+                    <button
+                      onClick={() => setActiveOutputTab('errors')}
+                      className={`px-4 py-2 text-sm font-medium transition-colors duration-150
+                        ${activeOutputTab === 'errors' ? 'border-b-2 border-red-500' : ''}
+                        ${errorOutput && errorOutput.trim() && errorOutput !== 'No errors found.'
+                          ? 'text-red-500'
+                          : activeOutputTab === 'errors'
+                            ? 'text-red-400'
+                            : 'text-gray-400 hover:text-gray-300'}
+                      `}
+                    >
+                      <span className="flex items-center">
+                        {errorOutput && errorOutput.trim() && errorOutput !== 'No errors found.' ? (
+                          <span className="mr-2 text-red-500 font-bold">&#33;</span>
+                        ) : (
+                          <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                          </svg>
+                        )}
+                        Errors
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setActiveOutputTab('warnings')}
+                      className={`px-4 py-2 text-sm font-medium transition-colors duration-150
+                        ${activeOutputTab === 'warnings' ? 'border-b-2 border-yellow-500' : ''}
+                        ${warningOutput && warningOutput.trim() && warningOutput !== 'No warnings found'
+                          ? 'text-yellow-500'
+                          : activeOutputTab === 'warnings'
+                            ? 'text-yellow-400'
+                            : 'text-gray-400 hover:text-gray-300'}
+                      `}
+                    >
+                      <span className="flex items-center">
+                        {warningOutput && warningOutput.trim() && warningOutput !== 'No warnings found' ? (
+                          <span className="mr-2 text-yellow-500 font-bold">&#33;</span>
+                        ) : (
+                          <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                            <line x1="12" y1="9" x2="12" y2="13" />
+                            <line x1="12" y1="17" x2="12.01" y2="17" />
+                          </svg>
+                        )}
+                        Warnings
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setActiveOutputTab('log')}
+                      className={`px-4 py-2 text-sm font-medium ${
+                        activeOutputTab === 'log'
+                          ? 'border-b-2 border-green-500 text-green-400'
+                          : 'text-gray-400 hover:text-gray-300'
+                      }`}
+                    >
+                      <span className="flex items-center">
+                        <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          <path d="M12 2v2" />
+                          <path d="M12 20v2" />
+                          <path d="M4.93 4.93l1.41 1.41" />
+                          <path d="M17.66 17.66l1.41 1.41" />
+                          <path d="M2 12h2" />
+                          <path d="M20 12h2" />
+                          <path d="M6.34 17.66l-1.41 1.41" />
+                          <path d="M19.07 4.93l-1.41 1.41" />
+                        </svg>
+                        Log
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setActiveOutputTab('report')}
+                      className={`px-4 py-2 text-sm font-medium ${
+                        activeOutputTab === 'report'
+                          ? 'border-b-2 border-purple-500 text-purple-400'
+                          : 'text-gray-400 hover:text-gray-300'
+                      }`}
+                    >
+                      <span className="flex items-center">
+                        <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="16" y1="13" x2="8" y2="13" />
+                          <line x1="16" y1="17" x2="8" y2="17" />
+                          <polyline points="10 9 9 9 8 9" />
+                        </svg>
+                        Report
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Tab Content */}
+                  <div className="p-4 text-sm text-gray-300 whitespace-pre-wrap flex-1 overflow-auto max-h-full">
+                    {activeOutputTab === 'output' && (
+                      <pre>{simulationOutput || 'No simulation output yet'}</pre>
+                    )}
+                    {activeOutputTab === 'errors' && (
+                      <div>
+                        {errorOutput ? (
+                          <div className="flex items-start">
+                            <div className="flex-shrink-0 pt-1">
+                              <svg className="h-5 w-5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="8" x2="12" y2="12" />
+                                <line x1="12" y1="16" x2="12.01" y2="16" />
+                              </svg>
+                            </div>
+                            <div className="ml-3 bg-[#1e1e1e] rounded p-2 overflow-auto max-h-full w-full text-xs border border-red-700">
+                              <pre className="whitespace-pre-wrap text-xs leading-snug">{errorOutput}</pre>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-gray-500">No errors found</div>
+                        )}
+                      </div>
+                    )}
+                    {activeOutputTab === 'warnings' && (
+                      <div>
+                        {warningOutput ? (
+                          <div className="flex items-start">
+                            <div className="flex-shrink-0">
+                              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                <line x1="12" y1="9" x2="12" y2="13" />
+                                <line x1="12" y1="17" x2="12.01" y2="17" />
+                              </svg>
+                            </div>
+                            <div className="ml-3 bg-[#1e1e1e] rounded p-2 overflow-auto max-h-full w-full text-xs border border-yellow-400">
+                              <pre className="whitespace-pre-wrap text-xs leading-snug">{warningOutput}</pre>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-gray-500">No warnings found</div>
+                        )}
+                      </div>
+                    )}
+                    {activeOutputTab === 'log' && (
+                      <div>
+                        {logOutput ? (
+                          <pre className="whitespace-pre-wrap overflow-auto max-h-full">{logOutput}</pre>
+                        ) : (
+                          <div className="text-gray-500">No log entries found</div>
+                        )}
+                      </div>
+                    )}
+                    {activeOutputTab === 'report' && (
+                      <div>
+                        {reportOutput ? (
+                          <pre className="whitespace-pre-wrap overflow-auto max-h-full">{reportOutput}</pre>
+                        ) : (
+                          <div className="text-gray-500">No report available</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="h-2/3">
+              <div className="h-[60%] min-h-[200px]">
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="text-xl font-semibold text-white">Waveform</h2>
                   <div className="flex space-x-2">
