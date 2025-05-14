@@ -5,10 +5,12 @@ import logging
 import asyncio
 import re
 import shutil
-from typing import Dict, List, Tuple, Optional, Any
+import json
+from typing import Dict, List, Tuple, Optional, Any, Generator
+from app.config import Config
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=getattr(logging, Config.LOG_LEVEL))
 logger = logging.getLogger(__name__)
 
 class VerilogSimulator:
@@ -17,12 +19,22 @@ class VerilogSimulator:
         self.temp_dir = tempfile.mkdtemp()
         os.chmod(self.temp_dir, 0o777)  # Ensure write permissions
         logger.debug(f"Created temporary directory: {self.temp_dir}")
-        self.simulation_timeout = 10  # Reduced to 10 seconds to match Vercel's timeout
+        
+        # Load configuration
+        config = Config.get_simulation_config()
+        self.simulation_timeout = config['simulation_timeout']
+        self.chunk_size = config['chunk_size']
+        self.max_chunks = config['max_chunks']
+        self.iverilog_path = config['iverilog_path']
+        self.vvp_path = config['vvp_path']
+        self.ivl_lib_path = config['ivl_lib_path']
+        self.vcd_filename = config['vcd_filename']
+        
         self.check_required_tools()
         
     def check_required_tools(self):
         """Check if required tools are available"""
-        required_tools = ["iverilog", "vvp"]
+        required_tools = [self.iverilog_path, self.vvp_path]
         missing_tools = []
         
         for tool in required_tools:
@@ -44,8 +56,8 @@ class VerilogSimulator:
         module_pattern = r'module\s+(\w+)\s*(?:\([^)]*\))?\s*;'
         return re.findall(module_pattern, verilog_code)
 
-    async def compile_and_simulate(self, verilog_code: str, testbench_code: str, top_module: str, top_testbench: str = None) -> Tuple[bool, str, str]:
-        """Compile and simulate Verilog code."""
+    async def compile_and_simulate(self, verilog_code: str, testbench_code: str, top_module: str, top_testbench: str = None) -> Generator[Dict[str, Any], None, None]:
+        """Compile and simulate Verilog code in chunks."""
         temp_dir = None
         try:
             # Create a temporary directory for the simulation files
@@ -55,7 +67,7 @@ class VerilogSimulator:
             # Create temporary files for the design and testbench
             design_path = os.path.join(temp_dir, "design.v")
             testbench_path = os.path.join(temp_dir, "testbench.v")
-            vcd_path = os.path.join(temp_dir, "waveform.vcd")
+            vcd_path = os.path.join(temp_dir, self.vcd_filename)
             
             with open(design_path, "w") as f:
                 f.write(verilog_code)
@@ -69,7 +81,7 @@ class VerilogSimulator:
             logger.debug(f"Created temporary files: {design_path}, {testbench_path}")
             
             # Compile the Verilog code
-            compile_cmd = ["iverilog", "-o", os.path.join(temp_dir, "sim"), design_path, testbench_path]
+            compile_cmd = [self.iverilog_path, "-o", os.path.join(temp_dir, "sim"), design_path, testbench_path]
             logger.debug(f"Compilation command: {' '.join(compile_cmd)}")
             
             try:
@@ -82,76 +94,138 @@ class VerilogSimulator:
                 )
                 
                 if compile_result.returncode != 0:
-                    logger.error(f"Compilation failed: {compile_result.stderr}")
-                    return False, f"Compilation failed: {compile_result.stderr}", ""
+                    error_msg = compile_result.stderr.strip()
+                    formatted_error = self.format_verilog_error(error_msg, verilog_code, testbench_code)
+                    logger.error(f"Compilation failed: {formatted_error}")
+                    yield {
+                        'success': False,
+                        'error': formatted_error,
+                        'is_complete': True
+                    }
+                    return
                 
                 logger.debug("Compilation successful")
             except subprocess.TimeoutExpired:
                 logger.error("Compilation timed out")
-                return False, "Compilation timed out. The operation took too long to complete.", ""
+                yield {
+                    'success': False,
+                    'error': "Compilation timed out. The operation took too long to complete.",
+                    'is_complete': True
+                }
+                return
             except Exception as e:
                 logger.error(f"Compilation error: {str(e)}")
-                return False, f"Compilation error: {str(e)}", ""
+                yield {
+                    'success': False,
+                    'error': f"Compilation error: {str(e)}",
+                    'is_complete': True
+                }
+                return
+
+            # Run simulation in chunks
+            current_time = 0
+            last_vcd_content = ""
+            chunk_count = 0
             
-            # Run the simulation
-            sim_cmd = ["vvp", "-M", "/usr/local/lib/ivl", os.path.join(temp_dir, "sim"), "-vcd", vcd_path]
-            logger.debug(f"Simulation command: {' '.join(sim_cmd)}")
-            
-            try:
-                sim_result = subprocess.run(
-                    sim_cmd,
-                    capture_output=True,
-                    text=True,
-                    cwd=temp_dir,
-                    timeout=self.simulation_timeout
-                )
-                
-                if sim_result.returncode != 0:
-                    logger.error(f"Simulation failed: {sim_result.stderr}")
-                    return False, f"Simulation failed: {sim_result.stderr}", ""
-                
-                logger.debug("Simulation successful")
-            except subprocess.TimeoutExpired:
-                logger.error("Simulation timed out")
-                return False, "Simulation timed out. The operation took too long to complete.", ""
-            except Exception as e:
-                logger.error(f"Simulation error: {str(e)}")
-                return False, f"Simulation error: {str(e)}", ""
-            
-            # Check if the VCD file was generated
-            if not os.path.exists(vcd_path):
-                logger.error(f"VCD file not found at {vcd_path}")
-                # Try to find the VCD file in the current directory
-                current_dir_vcd = os.path.join(os.getcwd(), "waveform.vcd")
-                if os.path.exists(current_dir_vcd):
-                    logger.debug(f"Found VCD file in current directory: {current_dir_vcd}")
-                    vcd_path = current_dir_vcd
-                else:
-                    # Try to find any .vcd file in the temp directory
-                    vcd_files = [f for f in os.listdir(temp_dir) if f.endswith('.vcd')]
-                    if vcd_files:
-                        vcd_path = os.path.join(temp_dir, vcd_files[0])
-                        logger.debug(f"Found VCD file in temp directory: {vcd_path}")
+            while chunk_count < self.max_chunks:
+                try:
+                    chunk_count += 1
+                    logger.debug(f"Starting simulation chunk {chunk_count} at time {current_time}")
+                    
+                    # Run simulation for this chunk
+                    sim_cmd = [
+                        self.vvp_path,
+                        "-M", self.ivl_lib_path,
+                        os.path.join(temp_dir, "sim"),
+                        "-vcd", vcd_path,
+                        "-t", str(current_time),
+                        "-e", str(current_time + self.chunk_size)
+                    ]
+                    
+                    logger.debug(f"Simulation command: {' '.join(sim_cmd)}")
+                    
+                    sim_result = subprocess.run(
+                        sim_cmd,
+                        capture_output=True,
+                        text=True,
+                        cwd=temp_dir,
+                        timeout=self.simulation_timeout
+                    )
+                    
+                    if sim_result.returncode != 0:
+                        error_msg = sim_result.stderr.strip()
+                        formatted_error = self.format_verilog_error(error_msg, verilog_code, testbench_code)
+                        logger.error(f"Simulation failed in chunk {chunk_count}: {formatted_error}")
+                        yield {
+                            'success': False,
+                            'error': formatted_error,
+                            'is_complete': True
+                        }
+                        return
+                    
+                    # Read the VCD file
+                    if os.path.exists(vcd_path):
+                        with open(vcd_path, "r") as f:
+                            vcd_content = f.read()
+                            
+                        # Only send the new content since last chunk
+                        new_vcd_content = vcd_content[len(last_vcd_content):]
+                        last_vcd_content = vcd_content
+                        
+                        logger.debug(f"Chunk {chunk_count}: Generated {len(new_vcd_content)} bytes of VCD data")
+                            
+                        # Yield the chunk results
+                        yield {
+                            'success': True,
+                            'output': sim_result.stdout,
+                            'waveform_data': new_vcd_content,
+                            'time_range': (current_time, current_time + self.chunk_size),
+                            'is_complete': False
+                        }
                     else:
-                        logger.error("No VCD file found")
-                        return False, "VCD file not generated", ""
+                        logger.debug(f"Chunk {chunk_count}: No VCD file generated, simulation complete")
+                        # No more data, simulation is complete
+                        yield {
+                            'success': True,
+                            'output': sim_result.stdout,
+                            'is_complete': True
+                        }
+                        break
+                    
+                    current_time += self.chunk_size
+                    
+                except subprocess.TimeoutExpired:
+                    logger.error(f"Simulation chunk {chunk_count} timed out")
+                    yield {
+                        'success': False,
+                        'error': "Simulation timed out. The operation took too long to complete.",
+                        'is_complete': True
+                    }
+                    break
+                except Exception as e:
+                    logger.error(f"Simulation error in chunk {chunk_count}: {str(e)}")
+                    yield {
+                        'success': False,
+                        'error': f"Simulation error: {str(e)}",
+                        'is_complete': True
+                    }
+                    break
             
-            # Read the VCD file
-            try:
-                with open(vcd_path, "r") as f:
-                    vcd_content = f.read()
+            if chunk_count >= self.max_chunks:
+                logger.warning(f"Simulation reached maximum chunk limit ({self.max_chunks})")
+                yield {
+                    'success': False,
+                    'error': f"Simulation exceeded maximum time limit ({self.max_chunks * self.chunk_size} time units)",
+                    'is_complete': True
+                }
                 
-                logger.debug(f"VCD file read successfully, size: {len(vcd_content)} bytes")
-            except Exception as e:
-                logger.error(f"Error reading VCD file: {str(e)}")
-                return False, f"Error reading VCD file: {str(e)}", ""
-            
-            # Return the simulation results
-            return True, sim_result.stdout, vcd_content
-            
         except Exception as e:
             logger.error(f"Error in compile_and_simulate: {str(e)}")
-            return False, f"Error: {str(e)}", ""
+            yield {
+                'success': False,
+                'error': f"Error: {str(e)}",
+                'is_complete': True
+            }
         finally:
             # Clean up temporary files
             if temp_dir and os.path.exists(temp_dir):
@@ -159,6 +233,45 @@ class VerilogSimulator:
                     shutil.rmtree(temp_dir)
                 except Exception as e:
                     logger.error(f"Error cleaning up temporary directory: {str(e)}")
+
+    def format_verilog_error(self, error_msg: str, verilog_code: str, testbench_code: str) -> str:
+        """Format Verilog error messages to be more readable and helpful."""
+        # Split the error message into lines
+        error_lines = error_msg.split('\n')
+        formatted_lines = []
+        
+        for line in error_lines:
+            # Check if the line contains a file and line number reference
+            if ':' in line:
+                parts = line.split(':')
+                if len(parts) >= 3:
+                    file_name = parts[0].strip()
+                    line_num = parts[1].strip()
+                    error_text = ':'.join(parts[2:]).strip()
+                    
+                    # Determine if the error is in the design or testbench
+                    if file_name == "design.v":
+                        code_lines = verilog_code.split('\n')
+                        context = "Design"
+                    else:
+                        code_lines = testbench_code.split('\n')
+                        context = "Testbench"
+                    
+                    try:
+                        line_num_int = int(line_num)
+                        if 0 <= line_num_int - 1 < len(code_lines):
+                            # Add the error line with context
+                            formatted_lines.append(f"\n{context} Error at line {line_num}:")
+                            formatted_lines.append(f"Error: {error_text}")
+                            formatted_lines.append(f"Code: {code_lines[line_num_int - 1].strip()}")
+                            continue
+                    except ValueError:
+                        pass
+            
+            # If the line doesn't match the pattern, add it as is
+            formatted_lines.append(line)
+        
+        return '\n'.join(formatted_lines)
 
     def prepare_testbench(self, testbench_code: str, top_module: str, top_testbench: str = None) -> str:
         """Prepare the testbench code by ensuring proper VCD dumping."""

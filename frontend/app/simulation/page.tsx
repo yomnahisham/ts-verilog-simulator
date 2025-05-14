@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, ChangeEvent, KeyboardEvent } from 'react';
 import Editor, { Monaco, OnMount } from '@monaco-editor/react';
 import WaveformViewer, { WaveformViewerRef } from '../components/WaveformViewer';
+import * as monaco from 'monaco-editor';
 
 // Define file type
 interface File {
@@ -126,6 +127,9 @@ export default function SimulationPage() {
   const [manualTestbenchName, setManualTestbenchName] = useState('');
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
+  const [showConsole, setShowConsole] = useState(true);
+  const [showWaveform, setShowWaveform] = useState(false);
+  const [simulationStatus, setSimulationStatus] = useState<'running' | 'completed' | 'error'>('completed');
 
   // Update time every second
   useEffect(() => {
@@ -390,7 +394,7 @@ export default function SimulationPage() {
     
     // Update the file content in state
     setFiles(prevFiles => 
-      prevFiles.map(file => 
+      prevFiles.map((file: File) => 
         file.id === activeFileId 
           ? { ...file, content: value } 
           : file
@@ -516,62 +520,58 @@ export default function SimulationPage() {
   };
 
   // Run simulation
-  const runSimulation = async () => {
-    // Force a re-scan for modules before running simulation
-    scanForModuleDeclarations();
+  const handleRunSimulation = async () => {
+    if (!selectedTopModule || !selectedTopTestbench) {
+      setSimulationOutput('Error: Please select both a top module and a testbench module from the dropdowns.');
+      return;
+    }
+
+    const topModule = selectedTopModule;
+    const topTestbench = selectedTopTestbench;
+
+    // Validate module names
+    const isValidIdentifier = (name: string) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name);
+    if (!isValidIdentifier(topModule)) {
+      setSimulationOutput(`Error: Invalid top module name "${topModule}". Module names must start with a letter or underscore and contain only letters, numbers, and underscores.`);
+      return;
+    }
+    if (!isValidIdentifier(topTestbench)) {
+      setSimulationOutput(`Error: Invalid testbench module name "${topTestbench}". Module names must start with a letter or underscore and contain only letters, numbers, and underscores.`);
+      return;
+    }
+
+    // Always get the latest file content from Monaco editor models
+    const latestFiles = files.map(file => {
+      if (editorModels[file.id] && typeof editorModels[file.id].getValue === 'function') {
+        return { ...file, content: editorModels[file.id].getValue() };
+      }
+      return file;
+    });
+
+    // Find the testbench file
+    const testbenchFile = latestFiles.find(file => {
+      const moduleRegex = new RegExp(`module\\s+${topTestbench}\\s*(?:#\\s*\\([^)]*\\))?\\s*(?:\\([^)]*\\))?\\s*;`);
+      return moduleRegex.test(file.content);
+    });
+
+    if (!testbenchFile) {
+      setSimulationOutput(`Error: Could not find testbench module "${topTestbench}". Please ensure the file containing this module is open.`);
+      return;
+    }
+
+    // Get all non-testbench files for the design
+    const designFiles = latestFiles.filter(file => file !== testbenchFile);
+    const designCode = designFiles.map(file => file.content).join('\n\n');
+
+    // Set simulating state
+    setIsSimulating(true);
+    setError(null);
+    setSimulationStatus('running');
+    setSimulationOutput('');
+    setWaveformData('');
+
     try {
-      // Check if backend is available
-      const isBackendAvailable = await checkBackendStatus();
-      if (!isBackendAvailable) {
-        setSimulationOutput('Error: Backend server is not available. Please make sure it is running.');
-        return;
-      }
-
-      // Get module names
-      if (!selectedTopModule || !selectedTopTestbench) {
-        setSimulationOutput('Error: Please select both a top module and a testbench module from the dropdowns.');
-        return;
-      }
-
-      const topModule = selectedTopModule;
-      const topTestbench = selectedTopTestbench;
-
-      // Validate module names
-      const isValidIdentifier = (name: string) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name);
-      if (!isValidIdentifier(topModule)) {
-        setSimulationOutput(`Error: Invalid top module name "${topModule}". Module names must start with a letter or underscore and contain only letters, numbers, and underscores.`);
-        return;
-      }
-      if (!isValidIdentifier(topTestbench)) {
-        setSimulationOutput(`Error: Invalid testbench module name "${topTestbench}". Module names must start with a letter or underscore and contain only letters, numbers, and underscores.`);
-        return;
-      }
-
-      // Always get the latest file content from Monaco editor models
-      const latestFiles = files.map(file => {
-        if (editorModels[file.id] && typeof editorModels[file.id].getValue === 'function') {
-          return { ...file, content: editorModels[file.id].getValue() };
-        }
-        return file;
-      });
-
-      // Find the testbench file
-      const testbenchFile = latestFiles.find(file => {
-        const moduleRegex = new RegExp(`module\\s+${topTestbench}\\s*(?:#\\s*\\([^)]*\\))?\\s*(?:\\([^)]*\\))?\\s*;`);
-        return moduleRegex.test(file.content);
-      });
-
-      if (!testbenchFile) {
-        setSimulationOutput(`Error: Could not find testbench module "${topTestbench}". Please ensure the file containing this module is open.`);
-        return;
-      }
-
-      // Get all non-testbench files for the design
-      const designFiles = latestFiles.filter(file => file !== testbenchFile);
-      const designCode = designFiles.map(file => file.content).join('\n\n');
-
-      // Send simulation request to backend
-      const response = await fetch(`${BACKEND_BASE_URL}/api/v1/simulate`, {
+      const response = await fetch('/api/simulate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -581,25 +581,74 @@ export default function SimulationPage() {
           testbench_code: testbenchFile.content.trim(),
           top_module: topModule,
           top_testbench: topTestbench
-        }),
+        })
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      
-      if (data.success) {
-        setSimulationOutput(data.output);
-        setWaveformData(data.waveform_data);
-      } else {
-        setSimulationOutput(`Simulation failed: ${data.output}`);
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      let accumulatedOutput = '';
+      let accumulatedWaveform = '';
+      let isFirstChunk = true;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // Convert the chunk to text
+        const chunk = new TextDecoder().decode(value);
+        
+        // Process each line in the chunk
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (!data.success) {
+                setError(data.error);
+                setSimulationStatus('error');
+                return;
+              }
+
+              if (data.output) {
+                accumulatedOutput += data.output;
+                setSimulationOutput(accumulatedOutput);
+              }
+
+              if (data.waveform_data) {
+                // For the first chunk, we need the complete VCD header
+                if (isFirstChunk) {
+                  accumulatedWaveform = data.waveform_data;
+                  isFirstChunk = false;
+                } else {
+                  // For subsequent chunks, we only need the new data
+                  accumulatedWaveform += data.waveform_data;
+                }
+                setWaveformData(accumulatedWaveform);
+              }
+
+              if (data.is_complete) {
+                setSimulationStatus('completed');
+              }
+            } catch (e) {
+              console.error('Error parsing JSON:', e);
+            }
+          }
+        }
       }
     } catch (error) {
       console.error('Simulation error:', error);
-      setSimulationOutput(`Error running simulation: ${error instanceof Error ? error.message : String(error)}`);
+      setError(error instanceof Error ? error.message : 'An error occurred during simulation');
+      setSimulationStatus('error');
+    } finally {
+      setIsSimulating(false);
     }
   };
 
@@ -690,7 +739,7 @@ export default function SimulationPage() {
               <select
                 id="top-module-select"
                 value={selectedTopModule}
-                onChange={(e) => setSelectedTopModule(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedTopModule(e.target.value)}
                 className="appearance-none bg-[#3c3c3c] text-white text-sm px-3 py-1.5 pr-8 rounded border border-[#555] focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={isSimulating || backendStatus !== 'online'}
                 aria-label="Select top module for simulation"
@@ -710,7 +759,10 @@ export default function SimulationPage() {
               </div>
             </div>
             <button
-              onClick={() => setShowManualModuleInput(!showManualModuleInput)}
+              onClick={(e: React.MouseEvent) => {
+                e.stopPropagation();
+                setShowManualModuleInput(!showManualModuleInput);
+              }}
               className="ml-2 text-xs bg-[#3c3c3c] hover:bg-[#4c4c4c] px-2 py-1.5 rounded border border-[#555] focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isSimulating || backendStatus !== 'online'}
               aria-label={showManualModuleInput ? "Cancel adding module" : "Add module manually"}
@@ -726,7 +778,7 @@ export default function SimulationPage() {
               <select
                 id="top-testbench-select"
                 value={selectedTopTestbench}
-                onChange={(e) => setSelectedTopTestbench(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedTopTestbench(e.target.value)}
                 className="appearance-none bg-[#3c3c3c] text-white text-sm px-3 py-1.5 pr-8 rounded border border-[#555] focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={isSimulating || backendStatus !== 'online'}
                 aria-label="Select top testbench for simulation"
@@ -746,7 +798,10 @@ export default function SimulationPage() {
               </div>
             </div>
             <button
-              onClick={() => setShowManualTestbenchInput(!showManualTestbenchInput)}
+              onClick={(e: React.MouseEvent) => {
+                e.stopPropagation();
+                setShowManualTestbenchInput(!showManualTestbenchInput);
+              }}
               className="ml-2 text-xs bg-[#3c3c3c] hover:bg-[#4c4c4c] px-2 py-1.5 rounded border border-[#555] focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isSimulating || backendStatus !== 'online'}
               aria-label={showManualTestbenchInput ? "Cancel adding testbench" : "Add testbench manually"}
@@ -760,10 +815,10 @@ export default function SimulationPage() {
               <input
                 type="text"
                 value={manualModuleName}
-                onChange={(e) => setManualModuleName(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setManualModuleName(e.target.value)}
                 placeholder="Module name"
                 className="bg-[#3c3c3c] text-white text-sm px-3 py-1.5 rounded border border-[#555] focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                onKeyDown={(e) => {
+                onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
                   if (e.key === 'Enter') {
                     addManualModule();
                   }
@@ -771,7 +826,10 @@ export default function SimulationPage() {
                 aria-label="Enter module name to add manually"
               />
               <button
-                onClick={addManualModule}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  addManualModule();
+                }}
                 className="ml-2 text-xs bg-blue-600 hover:bg-blue-700 px-2 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                 aria-label="Add the entered module name"
               >
@@ -785,10 +843,10 @@ export default function SimulationPage() {
               <input
                 type="text"
                 value={manualTestbenchName}
-                onChange={(e) => setManualTestbenchName(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setManualTestbenchName(e.target.value)}
                 placeholder="Testbench name"
                 className="bg-[#3c3c3c] text-white text-sm px-3 py-1.5 rounded border border-[#555] focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                onKeyDown={(e) => {
+                onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
                   if (e.key === 'Enter') {
                     addManualTestbench();
                   }
@@ -796,7 +854,10 @@ export default function SimulationPage() {
                 aria-label="Enter testbench name to add manually"
               />
               <button
-                onClick={addManualTestbench}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  addManualTestbench();
+                }}
                 className="ml-2 text-xs bg-blue-600 hover:bg-blue-700 px-2 py-1.5 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                 aria-label="Add the entered testbench name"
               >
@@ -805,7 +866,7 @@ export default function SimulationPage() {
             </div>
           )}
           <button
-            onClick={runSimulation}
+            onClick={handleRunSimulation}
             disabled={isSimulating || backendStatus !== 'online'}
             className={`px-3 py-1 rounded text-sm ${
               isSimulating || backendStatus !== 'online'
@@ -819,185 +880,123 @@ export default function SimulationPage() {
       </div>
       
       {/* Main content area */}
-      <div className="flex-1 overflow-hidden">
-        <div className="flex h-full">
-          {/* Left panel: Editors */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left panel - Editor */}
           <div className="w-1/2 flex flex-col border-r border-[#333]">
-            {/* Tab bar */}
-            <div className="flex border-b border-[#333] bg-[#252526] w-full">
-              <div className="flex-1 overflow-x-auto whitespace-nowrap flex flex-nowrap scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
-                {files.map(file => (
+          {/* File tabs */}
+          <div className="flex bg-[#252526] border-b border-[#333]">
+                {files.map((file: File) => (
                   <div 
                     key={file.id}
-                    className={`group inline-flex items-center shrink-0 px-4 py-2 text-sm border-b-2 ${
-                      activeFileId === file.id
-                        ? 'border-[#0e639c] bg-[#1e1e1e] text-white'
-                        : 'border-transparent text-gray-400 hover:bg-[#2a2d2e]'
-                    }`}
-                  >
+                className={`flex items-center px-4 py-2 border-r border-[#333] cursor-pointer ${
+                  activeFileId === file.id ? 'bg-[#1e1e1e]' : 'hover:bg-[#2d2d2d]'
+                }`}
+                onClick={() => setActiveFileId(file.id)}
+              >
+                <span className="text-sm">{file.name}</span>
                     <button
-                      onClick={() => handleTabChange(file.id)}
-                      className="flex-1 text-left whitespace-nowrap"
-                    >
-                      {file.name}
-                    </button>
-                    {files.length > 1 && (
-                      <button
-                        onClick={() => closeFile(file.id)}
-                        className="ml-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white"
+                  className="ml-2 text-gray-400 hover:text-white"
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    closeFile(file.id);
+                  }}
                       >
                         ×
                       </button>
-                    )}
                   </div>
                 ))}
-              </div>
-              <div className="flex-shrink-0 border-l border-[#333]">
                 <button
+              className="px-4 py-2 text-gray-400 hover:text-white hover:bg-[#2d2d2d]"
                   onClick={() => setShowNewFileModal(true)}
-                  className="px-2 py-2 text-gray-400 hover:text-white hover:bg-[#2a2d2e]"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="5" x2="12" y2="19"></line>
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
-                  </svg>
+              +
                 </button>
-              </div>
             </div>
             
             {/* Editor */}
-            <div className="flex-1 overflow-hidden">
-              <div className="h-full">
-                {activeFile && (
+          <div className="flex-1 relative">
                   <Editor
                     height="100%"
                     defaultLanguage="verilog"
-                    value={activeFile.content || ''}
-                    onChange={handleEditorChange}
+              language={activeFile?.language || 'verilog'}
+              value={activeFile?.content || ''}
+              onChange={(value: string | undefined) => handleEditorChange(value)}
                     onMount={handleEditorDidMount}
-                    theme="vs-dark"
                     options={editorOptions}
                   />
-                )}
               </div>
             </div>
             
-            {/* Status bar */}
-            <div className="h-6 bg-[#007acc] text-white text-xs flex items-center px-2">
-              <span>Ln {cursorPosition.line}, Col {cursorPosition.column}</span>
-              {activeFile && (
-                <span className="ml-4">{activeFile.name}</span>
-              )}
-            </div>
-          </div>
-          
-          {/* Right panel: Simulation output and waveform */}
+        {/* Right panel - Output and Waveform */}
           <div className="w-1/2 flex flex-col">
-            <div className="flex-1 overflow-hidden p-4">
-              <div className="mb-4 h-1/3">
-                <h3 className="text-sm font-medium text-white mb-2">Simulation Output</h3>
-                <div className="bg-[#252526] rounded overflow-auto" style={{ height: 'calc(100% - 2rem)' }}>
-                  <pre className="p-4 text-sm text-gray-300 whitespace-pre-wrap">
-                    {simulationOutput || 'No simulation output yet'}
-                  </pre>
+          {/* Tabs for Output and Waveform */}
+          <div className="flex bg-[#252526] border-b border-[#333]">
+                    <button
+              className={`px-4 py-2 ${
+                showConsole ? 'bg-[#1e1e1e]' : 'hover:bg-[#2d2d2d]'
+              }`}
+              onClick={() => {
+                setShowConsole(true);
+                setShowWaveform(false);
+              }}
+            >
+              Console
+                    </button>
+                    <button
+              className={`px-4 py-2 ${
+                showWaveform ? 'bg-[#1e1e1e]' : 'hover:bg-[#2d2d2d]'
+              }`}
+              onClick={() => {
+                setShowWaveform(true);
+                setShowConsole(false);
+              }}
+            >
+              Waveform
+                    </button>
+          </div>
+
+          {/* Error display */}
+          {error && (
+            <div className="bg-red-900/20 border-b border-red-500 p-4">
+              <div className="flex items-start">
+                <svg className="h-5 w-5 text-red-500 mr-2 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                <div className="flex-1">
+                  <h3 className="text-red-500 font-medium mb-1">Simulation Error</h3>
+                  <pre className="text-sm text-red-300 whitespace-pre-wrap font-mono">{error}</pre>
                 </div>
-              </div>
-              <div className="h-2/3">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-xl font-semibold text-white">Waveform</h2>
-                  <div className="flex space-x-2">
                     <button
-                      onClick={() => waveformViewerRef.current?.handleZoomIn()}
-                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D]"
-                      title="Zoom In (+)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => waveformViewerRef.current?.handleZoomOut()}
-                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D]"
-                      title="Zoom Out (-)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => waveformViewerRef.current?.handlePanLeft()}
-                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D]"
-                      title="Pan Left (←)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => waveformViewerRef.current?.handlePanRight()}
-                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D]"
-                      title="Pan Right (→)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => waveformViewerRef.current?.handleFitToView()}
-                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D]"
-                      title="Fit to View (F)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M3 4a1 1 0 011-1h4a1 1 0 010 2H6.414l2.293 2.293a1 1 0 11-1.414 1.414L5 6.414V8a1 1 0 01-2 0V4zm9 1a1 1 0 010-2h4a1 1 0 011 1v4a1 1 0 01-2 0V6.414l-2.293 2.293a1 1 0 11-1.414-1.414L13.586 5H12zm-9 7a1 1 0 012 0v1.586l2.293-2.293a1 1 0 111.414 1.414L6.414 15H8a1 1 0 010 2H4a1 1 0 01-1-1v-4zm13-1a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 010-2h1.586l-2.293-2.293a1 1 0 111.414-1.414L15 13.586V12a1 1 0 011-1z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => waveformViewerRef.current?.handleZoomToRange()}
-                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D]"
-                      title="Zoom to 0-60ns (Z)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => waveformViewerRef.current?.handleCollapseAll()}
-                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D]"
-                      title="Collapse All"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => waveformViewerRef.current?.handleExpandAll()}
-                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D]"
-                      title="Expand All"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => waveformViewerRef.current?.handleSignalOptions()}
-                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D]"
-                      title="Signal Options"
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c.13.31.2.65.2 1v.09c0 .66-.39 1.25-1 1.51a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 16 4.6c.31-.13.65-.2 1-.2h.09c.66 0 1.25.39 1.51 1a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 8c-.13-.31-.2-.65-.2-1V6.91c0-.66.39-1.25 1-1.51a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c-.13.31-.2.65-.2 1v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 21 15c-.31.13-.65.2-1 .2h-.09c-.66 0-1.25-.39-1.51-1a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 19.4 15z"/></svg>
+                  onClick={() => setError(null)}
+                  className="text-gray-400 hover:text-white ml-4"
+                >
+                  ×
                     </button>
                   </div>
                 </div>
-                <div className="bg-[#252526] rounded overflow-auto" style={{ height: 'calc(100% - 2rem)' }}>
+          )}
+
+          {/* Console output */}
+          {showConsole && (
+            <div className="flex-1 bg-[#1e1e1e] p-4 overflow-auto">
+              <pre className="text-sm font-mono whitespace-pre-wrap">{simulationOutput || 'No output available'}</pre>
+            </div>
+          )}
+
+          {/* Waveform viewer */}
+          {showWaveform && (
+            <div className="flex-1 bg-[#1e1e1e] p-4 overflow-auto">
                   {waveformData ? (
-                    <WaveformViewer ref={waveformViewerRef} vcdData={waveformData} onSignalOptionsDone={runSimulation} />
-                  ) : (
-                    <div className="p-4 text-gray-400">No waveform data available</div>
+                <WaveformViewer
+                  ref={waveformViewerRef}
+                  vcdData={waveformData}
+                  onTimeUpdate={(time: string) => setCurrentTime(time)}
+                />
+              ) : (
+                <div className="text-gray-400 text-center mt-4">No waveform data available</div>
                   )}
                 </div>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
       
@@ -1027,7 +1026,7 @@ export default function SimulationPage() {
               <input
                 type="text"
                 value={newFileName}
-                onChange={(e) => setNewFileName(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setNewFileName(e.target.value)}
                 className="w-full bg-[#3c3c3c] text-white px-3 py-2 rounded border border-[#555] focus:outline-none focus:border-[#0e639c]"
                 placeholder="e.g. counter.v"
               />
@@ -1036,7 +1035,7 @@ export default function SimulationPage() {
               <label className="block text-sm mb-1">Language</label>
               <select
                 value={newFileLanguage}
-                onChange={(e) => setNewFileLanguage(e.target.value as 'verilog' | 'systemverilog')}
+                onChange={(e: ChangeEvent<HTMLSelectElement>) => setNewFileLanguage(e.target.value as 'verilog' | 'systemverilog')}
                 className="w-full bg-[#3c3c3c] text-white px-3 py-2 rounded border border-[#555] focus:outline-none focus:border-[#0e639c]"
               >
                 <option value="verilog">Verilog</option>
@@ -1045,13 +1044,19 @@ export default function SimulationPage() {
             </div>
             <div className="flex justify-end space-x-2">
               <button
-                onClick={() => setShowNewFileModal(false)}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  setShowNewFileModal(false);
+                }}
                 className="px-3 py-1 text-sm bg-[#3c3c3c] text-white rounded hover:bg-[#4c4c4c]"
               >
                 Cancel
               </button>
               <button
-                onClick={createNewFile}
+                onClick={(e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  createNewFile();
+                }}
                 className="px-3 py-1 text-sm bg-[#0e639c] text-white rounded hover:bg-[#1177bb]"
               >
                 Create

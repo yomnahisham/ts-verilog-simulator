@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, validator
 import os
 import logging
@@ -103,35 +103,25 @@ async def test_endpoint():
         "current_dir": os.getcwd(),
     }
 
-@app.post("/api/v1/simulate", response_model=SimulationResponse)
-async def simulate_verilog(request: SimulationRequest):
-    """Real simulation endpoint using Icarus Verilog"""
-    logger.info(f"Simulation request received for {request.top_module}")
+@app.post("/api/simulate")
+async def simulate(request: SimulationRequest):
     try:
-        # Create a simulator instance
-        simulator = VerilogSimulator()
-        
-        # Run the simulation
-        success, output, waveform_data = await simulator.compile_and_simulate(
-            request.verilog_code,
-            request.testbench_code,
-            request.top_module,
-            request.top_testbench
-        )
-        
-        if not success:
-            raise HTTPException(status_code=400, detail=output)
-            
-        return SimulationResponse(
-            success=success,
-            output=output,
-            waveform_data=waveform_data
+        # Create a generator for streaming the simulation results
+        async def generate():
+            async for result in simulator.compile_and_simulate(
+                request.verilog_code,
+                request.testbench_code,
+                request.top_module,
+                request.top_testbench
+            ):
+                yield f"data: {json.dumps(result)}\n\n"
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream"
         )
     except Exception as e:
-        logger.error(f"Error in simulation: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Simulation error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Global exception handler
 @app.exception_handler(Exception)

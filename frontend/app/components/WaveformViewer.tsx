@@ -16,6 +16,7 @@ import 'allotment/dist/style.css';
 interface WaveformViewerProps {
   vcdData: string;
   onSignalOptionsDone?: () => void;
+  onTimeUpdate?: (time: string) => void;
 }
 
 interface Signal {
@@ -70,7 +71,7 @@ export interface WaveformViewerRef {
   handleSignalOptions: () => void;
 }
 
-const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcdData, onSignalOptionsDone }, ref) => {
+const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcdData, onSignalOptionsDone, onTimeUpdate }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const waveformAreaRef = useRef<HTMLDivElement>(null);
