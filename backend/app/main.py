@@ -8,6 +8,7 @@ import sys
 import json
 import time
 from app.services.verilog_simulator import VerilogSimulator
+from app.api.yosys_routes import router as yosys_router
 
 # Configure logging to output to stdout/stderr for Vercel
 logging.basicConfig(
@@ -141,6 +142,9 @@ async def simulate_verilog(request: SimulationRequest):
             output=f"Simulation error: {str(e)}",
             waveform_data=""
         )
+
+# Add Yosys routes
+app.include_router(yosys_router, prefix="/api/v1/yosys", tags=["yosys"])
 
 # Global exception handler
 @app.exception_handler(Exception)
