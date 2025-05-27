@@ -12,8 +12,8 @@ interface File {
   content: string;
 }
 
-// Backend configuration
-const BACKEND_BASE_URL = 'http://localhost:8001';
+// Backend configuration-> make it 'http://localhost:8001' when running locally
+const BACKEND_BASE_URL = 'https://ts-verilog-simulator-backend.onrender.com';
 const BACKEND_API_URL = `${BACKEND_BASE_URL}/api/v1`;
 const USE_REAL_SIMULATION = true; // Flag to use real simulation instead of mock data
 
@@ -692,13 +692,28 @@ export default function SimulationPage() {
         }),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        // If JSON parsing fails, create a basic error object
+        data = {
+          output: 'Failed to parse server response',
+          detail: 'Server returned an invalid response'
+        };
+      }
 
       if (!response.ok) {
-        // Ensure we have a string error message
+        // Handle error response
         let errorMessage: string;
+        let errorType: 'warning' | 'compilation' | 'simulation' | 'system' = 'system';
+        let currentStage = '';
+        let compilationStartTime = '';
+        let simulationStartTime = '';
+        let processedLogs: string[] = [];
+        
+        // Extract error message from different possible response formats
         if (response.status === 422) {
-          // Handle validation errors
           const validationErrors = data.detail || [];
           if (Array.isArray(validationErrors)) {
             errorMessage = validationErrors.map(err => err.msg || err.message || err).join('\n');
@@ -709,56 +724,167 @@ export default function SimulationPage() {
           } else {
             errorMessage = String(validationErrors);
           }
+        } else if (response.status === 500) {
+          // Handle 500 errors specifically
+          errorMessage = data.detail || data.output || 'Internal server error occurred during simulation';
+          // Try to determine error type from the message
+          if (errorMessage.toLowerCase().includes('compilation failed')) {
+            errorType = 'compilation';
+          } else if (errorMessage.toLowerCase().includes('simulation failed')) {
+            errorType = 'simulation';
+          } else if (errorMessage.toLowerCase().includes('warning')) {
+            errorType = 'warning';
+          }
         } else {
           errorMessage = String(data.output || data.detail || `HTTP error! status: ${response.status}`);
         }
         
-        // Map error keywords to their types
-        const errorTypeMap: Record<string, 'warning' | 'compilation' | 'simulation' | 'system'> = {
-          'warning': 'warning',
-          'compilation': 'compilation',
-          'simulation': 'simulation',
-          'validation': 'system'
-        };
-
-        // Find the first matching error type or default to 'system'
-        const errorType = Object.entries(errorTypeMap).find(([key]) => 
-          errorMessage.toLowerCase().includes(key)
-        )?.[1] || 'system';
-
-        // Format error message to be more user-friendly
         const formattedError = formatError(errorMessage);
         setErrorType(errorType);
+        
+        // Only set error states if this is not just a warning
+        if (errorType !== 'warning') {
         setError('Simulation failed');
         setErrorDetails(formattedError);
         setErrorOutput(formattedError);
-        // Always show backend output in Output tab, even on error
+        }
+        
+        // Set simulation output to include both error and any available output
         const backendOutput = data.output || errorMessage || formattedError;
         setSimulationOutput(backendOutput);
-        // Always show log entries if present
+        
+        // Process warnings from the backend response
+        if (data.warnings && Array.isArray(data.warnings)) {
+          const warningMessages = data.warnings.map((warning: string) => {
+            // Format warning messages to be more readable
+            const lines = warning.split('\n');
+            const formattedLines = lines.map(line => {
+              // Remove redundant [WARNING] prefix if it exists
+              line = line.replace(/^\[WARNING\]\s*/, '');
+              
+              // Format line numbers and arrows
+              if (line.includes('|')) {
+                const [lineNum, arrow] = line.split('|');
+                return `    ${lineNum.trim()} | ${arrow.trim()}`;
+              }
+              
+              // Format note lines
+              if (line.includes('note:')) {
+                return `  ${line.trim()}`;
+              }
+              
+              // Replace URLs with descriptive explanations
+              if (line && line.includes('https://verilator.org/warn/')) {
+                const warningCode = line.match(/warn\/([A-Z]+)/)?.[1];
+                let explanation = '';
+                
+                // Add explanations for common warnings
+                switch (warningCode) {
+                  case 'NEEDTIMINGOPT':
+                    explanation = 'This warning indicates that your design contains timing-related constructs (like delays or clock generation) but no timing options were specified. To fix this, you can either:\n' +
+                      '  1. Add timing options to your simulation command\n' +
+                      '  2. Use the --timing flag with Verilator\n' +
+                      '  3. If timing is not critical, you can ignore this warning';
+                    break;
+                  case 'WIDTH':
+                    explanation = 'This warning indicates a width mismatch in your design. For example, assigning a 4-bit value to an 8-bit signal. To fix this:\n' +
+                      '  1. Check signal declarations to ensure widths match\n' +
+                      '  2. Use proper width casting if intentional\n' +
+                      '  3. Adjust signal widths to match your design requirements';
+                    break;
+                  case 'UNUSED':
+                    explanation = 'This warning indicates that you have signals or variables that are declared but never used. To fix this:\n' +
+                      '  1. Remove unused signals if they are not needed\n' +
+                      '  2. Use the signal if it was intended to be used\n' +
+                      '  3. Add a comment explaining why the signal is intentionally unused';
+                    break;
+                  case 'LATCH':
+                    explanation = 'This warning indicates that your design contains latches, which are generally not recommended in synchronous designs. To fix this:\n' +
+                      '  1. Ensure all branches of combinational logic are covered\n' +
+                      '  2. Add default assignments to prevent latches\n' +
+                      '  3. Use proper synchronous design practices';
+                    break;
+                  case 'MULTIDRIVEN':
+                    explanation = 'This warning indicates that a signal is being driven from multiple sources. To fix this:\n' +
+                      '  1. Ensure each signal has only one driver\n' +
+                      '  2. Use proper multiplexing if multiple sources are needed\n' +
+                      '  3. Check for unintended signal connections';
+                    break;
+                  default:
+                    explanation = 'For more details about this warning, visit: ' + line;
+                }
+                
+                return `    Explanation: ${explanation}`;
+              }
+              
+              // Format other lines
+              return line.trim();
+            });
+            
+            // Group related warnings together
+            const warningGroups: string[] = [];
+            let currentGroup: string[] = [];
+            
+            formattedLines.forEach(line => {
+              if (line.startsWith('note:') && currentGroup.length > 0) {
+                warningGroups.push(currentGroup.join('\n'));
+                currentGroup = [];
+              }
+              currentGroup.push(line);
+            });
+            if (currentGroup.length > 0) {
+              warningGroups.push(currentGroup.join('\n'));
+            }
+            
+            return warningGroups.join('\n\n');
+          });
+          
+          // Add a header for each warning group
+          const formattedWarnings = warningMessages.map((warning: string, index: number) => {
+            return `Warning ${index + 1}:\n${warning}`;
+          });
+          
+          setWarningOutput(formattedWarnings.join('\n\n'));
+        }
+        
+        // Process log
         let logRaw = data.log || backendOutput;
-        const logLines = logRaw.split('\n').filter((line: string) => line.startsWith('INFO:') || line.startsWith('DEBUG:'));
+        const logLines = logRaw.split('\n').filter((line: string) => 
+          line.startsWith('INFO:') || 
+          line.startsWith('DEBUG:') || 
+          line.startsWith('ERROR:') ||
+          line.toLowerCase().includes('compilation') ||
+          line.toLowerCase().includes('simulation')
+        );
         const formattedLog = logLines.map((line: string) => {
           if (line.startsWith('INFO:')) return `[INFO]  ${line.replace('INFO:', '').trim()}`;
           if (line.startsWith('DEBUG:')) return `[DEBUG] ${line.replace('DEBUG:', '').trim()}`;
+          if (line.startsWith('ERROR:')) return `[ERROR] ${line.replace('ERROR:', '').trim()}`;
           return line;
         }).join('\n');
         setLogOutput(formattedLog || 'No log entries found');
-        throw new Error(formattedError);
+
+        // Generate a summary for the Report tab
+        const errorCount = errorType === 'warning' ? 0 : 1; // Only count as error if not just warnings
+        const warningCount = data.warnings ? data.warnings.length : 0;
+        const errorReportSummary = `Simulation Report\n=================\n\nTop Module: ${topModule}\nTestbench: ${topTestbench}\n\nCompilation: ${errorType === 'warning' ? 'Succeeded with Warnings' : 'Failed'}\nVCD Generated: No\nErrors: ${errorCount}\nWarnings: ${warningCount}\n\n${errorType === 'warning' ? 'Warnings:\n' + (data.warnings ? data.warnings.join('\n') : '') : 'Error: ' + formattedError}`;
+        setReportOutput(errorReportSummary);
+        
+        // Set the active tab based on content
+        if (errorCount > 0) {
+          setActiveOutputTab('errors');
+        } else if (warningCount > 0) {
+          setActiveOutputTab('warnings');
+      } else {
+          setActiveOutputTab('output');
+        }
+        
+        return; // Exit the function after handling the error
       }
 
       // Process the simulation output
       const output = data.output || '';
-      // For log: show the full raw backend output (all lines, including debug/info/errors)
-      let logRaw = '';
-      if (data.log) {
-        logRaw = data.log;
-      } else {
-        // If backend does not provide a log field, use the full output
-        logRaw = output;
-      }
-
-      // Enhanced log processing
+      let logRaw = data.log || output;
       const logLines = logRaw.split('\n');
       const processedLogs: string[] = [];
       
@@ -768,7 +894,102 @@ export default function SimulationPage() {
       let simulationStartTime = '';
       let totalTime = '';
       
-      logLines.forEach(line => {
+      // Process warnings from Verilator
+      if (data.warnings && Array.isArray(data.warnings)) {
+        const warningMessages = data.warnings.map((warning: string) => {
+          // Format warning messages to be more readable
+          const lines = warning.split('\n');
+          const formattedLines = lines.map(line => {
+            // Remove redundant [WARNING] prefix if it exists
+            line = line.replace(/^\[WARNING\]\s*/, '');
+            
+            // Format line numbers and arrows
+            if (line.includes('|')) {
+              const [lineNum, arrow] = line.split('|');
+              return `    ${lineNum.trim()} | ${arrow.trim()}`;
+            }
+            
+            // Format note lines
+            if (line.includes('note:')) {
+              return `  ${line.trim()}`;
+            }
+            
+            // Replace URLs with descriptive explanations
+            if (line && line.includes('https://verilator.org/warn/')) {
+              const warningCode = line.match(/warn\/([A-Z]+)/)?.[1];
+              let explanation = '';
+              
+              // Add explanations for common warnings
+              switch (warningCode) {
+                case 'NEEDTIMINGOPT':
+                  explanation = 'This warning indicates that your design contains timing-related constructs (like delays or clock generation) but no timing options were specified. To fix this, you can either:\n' +
+                    '  1. Add timing options to your simulation command\n' +
+                    '  2. Use the --timing flag with Verilator\n' +
+                    '  3. If timing is not critical, you can ignore this warning';
+                  break;
+                case 'WIDTH':
+                  explanation = 'This warning indicates a width mismatch in your design. For example, assigning a 4-bit value to an 8-bit signal. To fix this:\n' +
+                    '  1. Check signal declarations to ensure widths match\n' +
+                    '  2. Use proper width casting if intentional\n' +
+                    '  3. Adjust signal widths to match your design requirements';
+                  break;
+                case 'UNUSED':
+                  explanation = 'This warning indicates that you have signals or variables that are declared but never used. To fix this:\n' +
+                    '  1. Remove unused signals if they are not needed\n' +
+                    '  2. Use the signal if it was intended to be used\n' +
+                    '  3. Add a comment explaining why the signal is intentionally unused';
+                  break;
+                case 'LATCH':
+                  explanation = 'This warning indicates that your design contains latches, which are generally not recommended in synchronous designs. To fix this:\n' +
+                    '  1. Ensure all branches of combinational logic are covered\n' +
+                    '  2. Add default assignments to prevent latches\n' +
+                    '  3. Use proper synchronous design practices';
+                  break;
+                case 'MULTIDRIVEN':
+                  explanation = 'This warning indicates that a signal is being driven from multiple sources. To fix this:\n' +
+                    '  1. Ensure each signal has only one driver\n' +
+                    '  2. Use proper multiplexing if multiple sources are needed\n' +
+                    '  3. Check for unintended signal connections';
+                  break;
+                default:
+                  explanation = 'For more details about this warning, visit: ' + line;
+              }
+              
+              return `    Explanation: ${explanation}`;
+            }
+            
+            // Format other lines
+            return line.trim();
+          });
+          
+          // Group related warnings together
+          const warningGroups: string[] = [];
+          let currentGroup: string[] = [];
+          
+          formattedLines.forEach(line => {
+            if (line.startsWith('note:') && currentGroup.length > 0) {
+              warningGroups.push(currentGroup.join('\n'));
+              currentGroup = [];
+            }
+            currentGroup.push(line);
+          });
+          if (currentGroup.length > 0) {
+            warningGroups.push(currentGroup.join('\n'));
+          }
+          
+          return warningGroups.join('\n\n');
+        });
+        
+        // Add a header for each warning group
+        const formattedWarnings = warningMessages.map((warning: string, index: number) => {
+          return `Warning ${index + 1}:\n${warning}`;
+        });
+        
+        setWarningOutput(formattedWarnings.join('\n\n'));
+      }
+
+      // Process log lines
+      logLines.forEach((line: string) => {
         // Skip empty lines
         if (!line.trim()) return;
         
@@ -828,7 +1049,17 @@ export default function SimulationPage() {
         
         // Process warnings
         else if (line.toLowerCase().includes('warning')) {
-          processedLogs.push(`[${new Date().toLocaleTimeString()}] [WARNING] ${line.trim()}`);
+          const warningMsg = `[${new Date().toLocaleTimeString()}] [WARNING] ${line.trim()}`;
+          processedLogs.push(warningMsg);
+          // Add to warnings output as well
+          setWarningOutput(prev => {
+            const newWarning = warningMsg;
+            if (!prev) return newWarning;
+            if (!prev.includes(newWarning)) {
+              return `${prev}\n${newWarning}`;
+            }
+            return prev;
+          });
         }
         
         // Process errors
@@ -903,13 +1134,18 @@ export default function SimulationPage() {
       
       // Update the output states
       setErrorOutput(errors.join('\n'));
-      setWarningOutput(warnings.join('\n'));
+      // Combine warnings from both sources
+      const allWarnings = [
+        ...(data.warnings || []).map((w: string) => `[WARNING] ${w}`),
+        ...warnings
+      ];
+      setWarningOutput(allWarnings.join('\n'));
       setLogOutput(processedLogs.join('\n'));
-      setSimulationOutput(output); // Set the full output in the simulation output tab
+      setSimulationOutput(output);
 
       // Generate a summary for the Report tab
       const errorCount = errors.length;
-      const warningCount = warnings.length;
+      const warningCount = allWarnings.length;
       const compilationSucceeded = errorCount === 0 && output.toLowerCase().includes('compilation successful');
       const vcdGenerated = output.toLowerCase().includes('vcd') || output.toLowerCase().includes('dumpfile');
       const reportTopModule = topModule || selectedTopModule;
@@ -930,7 +1166,7 @@ export default function SimulationPage() {
       // Set the active tab based on content
       if (errors.length > 0) {
         setActiveOutputTab('errors');
-      } else if (warnings.length > 0) {
+      } else if (warningCount > 0) {
         setActiveOutputTab('warnings');
       } else {
         setActiveOutputTab('output');
@@ -945,10 +1181,8 @@ export default function SimulationPage() {
       console.error('Simulation error:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       const formattedError = formatError(errorMessage);
-      // Always show backend output in Output tab, even on error
       setSimulationOutput(errorMessage);
       setErrorOutput(formattedError);
-      // Always show log entries if present
       let logRaw = errorMessage;
       const logLines = logRaw.split('\n').filter((line: string) => line.startsWith('INFO:') || line.startsWith('DEBUG:'));
       const formattedLog = logLines.map((line: string) => {

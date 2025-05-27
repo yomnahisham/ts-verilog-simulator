@@ -8,6 +8,7 @@ import sys
 import json
 import time
 from app.services.verilog_simulator import VerilogSimulator
+from typing import List
 
 # Configure logging to output to stdout/stderr for Vercel
 logging.basicConfig(
@@ -67,6 +68,7 @@ class SimulationResponse(BaseModel):
     success: bool
     output: str
     waveform_data: str
+    warnings: List[str]
 
 @app.get("/")
 async def root():
@@ -111,6 +113,12 @@ async def simulate_verilog(request: SimulationRequest):
         # Create a simulator instance
         simulator = VerilogSimulator()
         
+        # Get warnings from Verilator
+        warnings = simulator.get_verilator_warnings(
+            request.verilog_code,
+            request.testbench_code
+        )
+        
         # Run the simulation
         success, output, waveform_data = await simulator.compile_and_simulate(
             request.verilog_code,
@@ -125,7 +133,8 @@ async def simulate_verilog(request: SimulationRequest):
         return SimulationResponse(
             success=success,
             output=output,
-            waveform_data=waveform_data
+            waveform_data=waveform_data,
+            warnings=warnings
         )
     except Exception as e:
         logger.error(f"Error in simulation: {str(e)}")

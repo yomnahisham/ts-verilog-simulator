@@ -1,8 +1,11 @@
 FROM python:3.11-slim
 
-# Install system dependencies including iverilog
+# Install system dependencies including iverilog and verilator
 RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
     iverilog \
+    verilator \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -22,10 +25,14 @@ ENV PORT=10000
 # Expose the port
 EXPOSE $PORT
 
-# Verify iverilog installation with a test file
+# Verify installations with test files
 RUN echo "module test; initial begin \$display(\"Hello, World!\"); \$finish; end endmodule" > test.v && \
     iverilog -o test test.v && \
-    vvp test
+    vvp test && \
+    rm test.v test && \
+    echo "module test; endmodule" > test.v && \
+    verilator --lint-only test.v && \
+    rm test.v
 
 # Run the application
 WORKDIR /app/backend

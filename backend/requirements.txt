@@ -1,5 +1,7 @@
-fastapi==0.95.2
-uvicorn==0.22.0
+fastapi==0.68.1
+uvicorn==0.15.0
 python-dotenv==0.19.0
-pydantic==1.10.7
-mangum==0.17.0
+pydantic==1.8.2
+python-multipart==0.0.5
+mangum==0.12.3
+verilator>=4.226

@@ -22,7 +22,7 @@ class VerilogSimulator:
         
     def check_required_tools(self):
         """Check if required tools are available"""
-        required_tools = ["iverilog", "vvp"]
+        required_tools = ["iverilog", "vvp", "verilator"]
         missing_tools = []
         
         for tool in required_tools:
@@ -256,4 +256,72 @@ end
                 'vcd_content': "",
                 'compile_output': "",
                 'sim_output': ""
-            } 
+            }
+
+    def get_verilator_warnings(self, verilog_code: str, testbench_code: str) -> List[str]:
+        """Get warnings from Verilator for the given Verilog code."""
+        warnings = []
+        temp_dir = None
+        try:
+            # Create a temporary directory for the files
+            temp_dir = tempfile.mkdtemp()
+            
+            # Write the design and testbench files
+            design_path = os.path.join(temp_dir, "design.v")
+            testbench_path = os.path.join(temp_dir, "testbench.v")
+            
+            with open(design_path, "w") as f:
+                f.write(verilog_code)
+            with open(testbench_path, "w") as f:
+                f.write(testbench_code)
+            
+            # Run Verilator with warning flags
+            verilator_cmd = [
+                "verilator",
+                "--lint-only",  # Only check for warnings, don't simulate
+                "--Wall",       # Enable all warnings
+                "--Wno-fatal",  # Don't treat warnings as errors
+                "--Wno-style",  # Ignore style warnings
+                design_path,
+                testbench_path
+            ]
+            
+            try:
+                result = subprocess.run(
+                    verilator_cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=temp_dir,
+                    timeout=self.simulation_timeout
+                )
+                
+                # Process the output to extract warnings
+                if result.stderr:
+                    warning_lines = result.stderr.split('\n')
+                    for line in warning_lines:
+                        if line.strip() and not line.startswith('%'):
+                            # Clean up the warning message
+                            warning = line.strip()
+                            if warning.startswith('%Warning-'):
+                                warning = warning[9:]  # Remove '%Warning-' prefix
+                            warnings.append(warning)
+            
+            except subprocess.TimeoutExpired:
+                logger.error("Verilator warning check timed out")
+                warnings.append("Warning check timed out")
+            except Exception as e:
+                logger.error(f"Error running Verilator: {str(e)}")
+                warnings.append(f"Error checking warnings: {str(e)}")
+            
+        except Exception as e:
+            logger.error(f"Error in get_verilator_warnings: {str(e)}")
+            warnings.append(f"Error checking warnings: {str(e)}")
+        finally:
+            # Clean up temporary files
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception as e:
+                    logger.error(f"Error cleaning up temporary directory: {str(e)}")
+        
+        return warnings 
