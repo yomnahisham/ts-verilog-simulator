@@ -754,8 +754,20 @@ export default function SimulationPage() {
         setSimulationOutput(backendOutput);
         
         // Process warnings from the backend response
+        let warningCount = 0;
+        let formattedWarnings: string[] = [];
+        let warningSummary = '';
+        const errors: string[] = [];
+        const output = data.output || '';
+        
+        const generateWarningSummary = (warnings: string[]): string => {
+          if (warnings.length === 0) return '';
+          return `\n\nWarning Summary:\n${warnings.map((w: string, i: number) => `Warning ${i + 1}: ${w.split('\n')[0]}`).join('\n')}`;
+        };
+        
         if (data.warnings && Array.isArray(data.warnings)) {
-          const warningMessages = data.warnings.map((warning: string) => {
+          warningCount = data.warnings.length;
+          formattedWarnings = data.warnings.map((warning: string) => {
             // Format warning messages to be more readable
             const lines = warning.split('\n');
             const formattedLines = lines.map(line => {
@@ -840,15 +852,16 @@ export default function SimulationPage() {
           });
           
           // Add a header for each warning group
-          const formattedWarnings = warningMessages.map((warning: string, index: number) => {
+          formattedWarnings = formattedWarnings.map((warning: string, index: number) => {
             return `Warning ${index + 1}:\n${warning}`;
           });
           
           setWarningOutput(formattedWarnings.join('\n\n'));
+          warningSummary = generateWarningSummary(formattedWarnings);
         }
         
         // Process log
-        let logRaw = data.log || backendOutput;
+        const logRaw = data.log || data.output || '';
         const logLines = logRaw.split('\n').filter((line: string) => 
           line.startsWith('INFO:') || 
           line.startsWith('DEBUG:') || 
@@ -865,10 +878,24 @@ export default function SimulationPage() {
         setLogOutput(formattedLog || 'No log entries found');
 
         // Generate a summary for the Report tab
-        const errorCount = errorType === 'warning' ? 0 : 1; // Only count as error if not just warnings
-        const warningCount = data.warnings ? data.warnings.length : 0;
-        const errorReportSummary = `Simulation Report\n=================\n\nTop Module: ${topModule}\nTestbench: ${topTestbench}\n\nCompilation: ${errorType === 'warning' ? 'Succeeded with Warnings' : 'Failed'}\nVCD Generated: No\nErrors: ${errorCount}\nWarnings: ${warningCount}\n\n${errorType === 'warning' ? 'Warnings:\n' + (data.warnings ? data.warnings.join('\n') : '') : 'Error: ' + formattedError}`;
-        setReportOutput(errorReportSummary);
+        const errorCount = errors.length;
+        const compilationSucceeded = errorCount === 0 && output.toLowerCase().includes('compilation successful');
+        const vcdGenerated = output.toLowerCase().includes('vcd') || output.toLowerCase().includes('dumpfile');
+        const reportTopModule = topModule || selectedTopModule;
+        const reportTopTestbench = topTestbench || selectedTopTestbench;
+        let suggestion = '';
+        if (errorCount > 0) {
+          suggestion = 'Check the error messages above. Common issues include missing semicolons, undeclared signals, or invalid module instantiations.';
+        } else if (warningCount > 0) {
+          suggestion = 'Review the warnings for potential issues, but your code may still run.';
+        } else if (compilationSucceeded) {
+          suggestion = 'Simulation ran successfully!';
+        } else {
+          suggestion = 'Simulation completed.';
+        }
+
+        const reportSummary = `Simulation Report\n=================\n\nTop Module: ${reportTopModule}\nTestbench: ${reportTopTestbench}\n\nCompilation: ${compilationSucceeded ? 'Succeeded' : 'Failed'}\nVCD Generated: ${vcdGenerated ? 'Yes' : 'No'}\nErrors: ${errorCount}\nWarnings: ${warningCount}\n\n${suggestion}${warningSummary}`;
+        setReportOutput(reportSummary);
         
         // Set the active tab based on content
         if (errorCount > 0) {
@@ -895,6 +922,7 @@ export default function SimulationPage() {
       let totalTime = '';
       
       // Process warnings from Verilator
+      let formattedWarnings: string[] = [];
       if (data.warnings && Array.isArray(data.warnings)) {
         const warningMessages = data.warnings.map((warning: string) => {
           // Format warning messages to be more readable
@@ -981,7 +1009,7 @@ export default function SimulationPage() {
         });
         
         // Add a header for each warning group
-        const formattedWarnings = warningMessages.map((warning: string, index: number) => {
+        formattedWarnings = warningMessages.map((warning: string, index: number) => {
           return `Warning ${index + 1}:\n${warning}`;
         });
         
@@ -1051,15 +1079,14 @@ export default function SimulationPage() {
         else if (line.toLowerCase().includes('warning')) {
           const warningMsg = `[${new Date().toLocaleTimeString()}] [WARNING] ${line.trim()}`;
           processedLogs.push(warningMsg);
-          // Add to warnings output as well
-          setWarningOutput(prev => {
-            const newWarning = warningMsg;
-            if (!prev) return newWarning;
-            if (!prev.includes(newWarning)) {
-              return `${prev}\n${newWarning}`;
-            }
-            return prev;
-          });
+          // setWarningOutput(prev => {
+          //   const newWarning = warningMsg;
+          //   if (!prev) return newWarning;
+          //   if (!prev.includes(newWarning)) {
+          //     return `${prev}\n${newWarning}`;
+          //   }
+          //   return prev;
+          // });
         }
         
         // Process errors
@@ -1134,18 +1161,13 @@ export default function SimulationPage() {
       
       // Update the output states
       setErrorOutput(errors.join('\n'));
-      // Combine warnings from both sources
-      const allWarnings = [
-        ...(data.warnings || []).map((w: string) => `[WARNING] ${w}`),
-        ...warnings
-      ];
-      setWarningOutput(allWarnings.join('\n'));
+      // We don't need to set warning output here since we already set it with our formatted version
       setLogOutput(processedLogs.join('\n'));
       setSimulationOutput(output);
 
       // Generate a summary for the Report tab
       const errorCount = errors.length;
-      const warningCount = allWarnings.length;
+      const warningCount = warnings.length;
       const compilationSucceeded = errorCount === 0 && output.toLowerCase().includes('compilation successful');
       const vcdGenerated = output.toLowerCase().includes('vcd') || output.toLowerCase().includes('dumpfile');
       const reportTopModule = topModule || selectedTopModule;
@@ -1160,7 +1182,13 @@ export default function SimulationPage() {
       } else {
         suggestion = 'Simulation completed.';
       }
-      const reportSummary = `Simulation Report\n=================\n\nTop Module: ${reportTopModule}\nTestbench: ${reportTopTestbench}\n\nCompilation: ${compilationSucceeded ? 'Succeeded' : 'Failed'}\nVCD Generated: ${vcdGenerated ? 'Yes' : 'No'}\nErrors: ${errorCount}\nWarnings: ${warningCount}\n\n${suggestion}`;
+
+      // Create warning summary if there are warnings
+      const warningSummary = warningCount > 0 
+        ? `\n\nWarning Summary:\n${formattedWarnings.map((w: string, i: number) => `Warning ${i + 1}: ${w.split('\n')[0]}`).join('\n')}`
+        : '';
+
+      const reportSummary = `Simulation Report\n=================\n\nTop Module: ${reportTopModule}\nTestbench: ${reportTopTestbench}\n\nCompilation: ${compilationSucceeded ? 'Succeeded' : 'Failed'}\nVCD Generated: ${vcdGenerated ? 'Yes' : 'No'}\nErrors: ${errorCount}\nWarnings: ${warningCount}\n\n${suggestion}${warningSummary}`;
       setReportOutput(reportSummary);
       
       // Set the active tab based on content
