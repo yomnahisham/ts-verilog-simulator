@@ -155,6 +155,9 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": f"Internal server error: {str(exc)}"}
     )
 
+# Mount the waveform router
+app.include_router(waveform.router, prefix="/api/v1/waveform", tags=["waveform"])
+
 # Handler for AWS Lambda
 from mangum import Mangum
 handler = Mangum(app)
@@ -163,5 +166,3 @@ handler = Mangum(app)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)
-
-app.include_router(waveform.router, prefix="/api/v1/waveform", tags=["waveform"])

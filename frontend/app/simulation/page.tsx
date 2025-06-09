@@ -831,7 +831,7 @@ export default function SimulationPage() {
           if (errorData.detail) {
             if (typeof errorData.detail === 'object' && errorData.detail.full_output) {
               errorMessage = errorData.detail.full_output;
-            } else {
+          } else {
               errorMessage = errorData.detail;
             }
           } else if (errorData.output) {
@@ -840,7 +840,7 @@ export default function SimulationPage() {
             errorMessage = errorData;
           } else if (errorData.message) {
             errorMessage = errorData.message;
-          } else {
+        } else {
             errorMessage = `HTTP error! status: ${response.status}`;
           }
 
@@ -860,7 +860,7 @@ export default function SimulationPage() {
 
           // Set the error states with the formatted messages
           setErrorType('compilation');
-          setError('Simulation failed');
+        setError('Simulation failed');
           setErrorDetails(formattedErrors);
           setErrorOutput(formattedErrors);
           setWarningOutput(formattedWarnings);
@@ -956,10 +956,10 @@ export default function SimulationPage() {
       // Set simulation output
       const simulationOutput = simulationLines.join('\n').trim();
       setSimulationOutput(simulationOutput);
-
-      // Set the active tab based on content
+        
+        // Set the active tab based on content
       if (simulationOutput) {
-        setActiveOutputTab('output');
+          setActiveOutputTab('output');
       } else if (warningLines.length > 0) {
         setActiveOutputTab('warnings');
       }
@@ -1545,7 +1545,7 @@ export default function SimulationPage() {
                         Report
                       </span>
                     </button>
-                </div>
+                  </div>
 
                   {/* Tab Content */}
                   <div className="p-4 text-sm text-gray-300 whitespace-pre-wrap flex-1 overflow-auto max-h-full">
@@ -1562,7 +1562,7 @@ export default function SimulationPage() {
                                 <line x1="12" y1="8" x2="12" y2="12" />
                                 <line x1="12" y1="16" x2="12.01" y2="16" />
                               </svg>
-              </div>
+                            </div>
                             <div className="ml-3 bg-[#1e1e1e] rounded p-2 overflow-auto max-h-full w-full text-xs border border-red-700">
                               <pre className="whitespace-pre-wrap text-xs leading-snug font-mono">{errorOutput}</pre>
                             </div>
