@@ -8,6 +8,7 @@ import sys
 import json
 import time
 from app.services.verilog_simulator import VerilogSimulator
+from app.api import waveform
 
 # Configure logging to output to stdout/stderr for Vercel
 logging.basicConfig(
@@ -162,3 +163,5 @@ handler = Mangum(app)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)
+
+app.include_router(waveform.router, prefix="/api/v1/waveform", tags=["waveform"])
