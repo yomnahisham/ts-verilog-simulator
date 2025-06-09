@@ -34,5 +34,3 @@ export async function simulateVerilog(code: string): Promise<any> {
     throw error;
   }
 }
-
-// ... existing code ... 
