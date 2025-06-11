@@ -30,6 +30,7 @@ var/
 .installed.cfg
 *.egg
 venv/
+venv311/
 
 # Verilog simulation files
 *.vcd
