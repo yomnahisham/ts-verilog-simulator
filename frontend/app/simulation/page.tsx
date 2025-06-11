@@ -13,7 +13,7 @@ interface File {
 }
 
 // Backend configuration-> make it 'http://localhost:8001' when running locally
-const BACKEND_BASE_URL = 'https://ts-verilog-simulator-backend.onrender.com';
+const BACKEND_BASE_URL = 'http://localhost:8001'; //'https://ts-verilog-simulator-backend.onrender.com';
 const BACKEND_API_URL = `${BACKEND_BASE_URL}/api/v1`;
 const USE_REAL_SIMULATION = true; // Flag to use real simulation instead of mock data
 
@@ -338,6 +338,8 @@ export default function SimulationPage() {
   const [warningOutput, setWarningOutput] = useState<string>('');
   const [logOutput, setLogOutput] = useState<string>('');
   const [reportOutput, setReportOutput] = useState<string>('');
+  const [showDownloadOptions, setShowDownloadOptions] = useState(false);
+  const [selectedFormat, setSelectedFormat] = useState<'png' | 'svg' | 'pdf'>('png');
 
   // Update time every second
   useEffect(() => {
@@ -1197,6 +1199,33 @@ export default function SimulationPage() {
     return errors;
   };
 
+  const handleDownload = async () => {
+    if (!waveformViewerRef.current) return;
+    try {
+      const result = await waveformViewerRef.current.exportWaveform({
+        format: selectedFormat,
+        scale: window.devicePixelRatio || 1,
+        backgroundColor: '#000',
+        showGrid: true,
+        showValues: true
+      });
+      const url = typeof result === 'string'
+        ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(result)}`
+        : URL.createObjectURL(result);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `waveform.${selectedFormat}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      if (typeof result !== 'string') {
+        URL.revokeObjectURL(url);
+      }
+    } catch (error) {
+      console.error('Error exporting waveform:', error);
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-[#1e1e1e] text-white font-['Menlo',_'Monaco',_'Courier_New',_monospace]">
       {/* Top toolbar */}
@@ -1692,10 +1721,47 @@ export default function SimulationPage() {
                     </button>
                     <button
                       onClick={() => waveformViewerRef.current?.handleSignalOptions()}
-                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D]"
+                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D] transition-colors"
                       title="Signal Options"
                     >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c.13.31.2.65.2 1v.09c0 .66-.39 1.25-1 1.51a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 16 4.6c.31-.13.65-.2 1-.2h.09c.66 0 1.25.39 1.51 1a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 8c-.13-.31-.2-.65-.2-1V6.91c0-.66.39-1.25 1-1.51a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c-.13.31-.2.65-.2 1v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 21 15c-.31.13-.65.2-1 .2h-.09c-.66 0-1.25-.39-1.51-1a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 19.4 15z"/></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <circle cx="12" cy="12" r="3" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c.13.31.2.65.2 1v.09c0 .66-.39 1.25-1 1.51a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 16 4.6c.31-.13.65-.2 1-.2h.09c.66 0 1.25.39 1.51 1a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 8c-.13-.31-.2-.65-.2-1V6.91c0-.66.39-1.25 1-1.51a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c-.13.31-.2.65-.2 1v.09c0 .66.39 1.25 1 1.51a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 21 15c-.31.13-.65.2-1 .2h-.09c-.66 0-1.25-.39-1.51-1a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 19.4 15z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setShowDownloadOptions(v => !v)}
+                      className="bg-[#3D3D3D] text-white px-2 py-1 rounded hover:bg-[#4D4D4D] transition-colors relative"
+                      title="Download Waveform"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 4v12" /></svg>
+                      Download
+                      {showDownloadOptions && (
+                        <div className="absolute right-0 mt-2 w-40 bg-[#252526] border border-[#333] rounded shadow-lg z-50">
+                          <div className="p-2">
+                            <div className="text-white mb-2">Select Format:</div>
+                            <div className="space-y-1">
+                              {(['png', 'svg', 'pdf'] as const).map((format) => (
+                                <button
+                                  key={format}
+                                  onClick={() => {
+                                    setSelectedFormat(format);
+                                    setShowDownloadOptions(false);
+                                    handleDownload();
+                                  }}
+                                  className={`w-full text-left px-3 py-2 rounded transition-colors duration-100 ${
+                                    selectedFormat === format
+                                      ? 'bg-[#00FF00] text-black'
+                                      : 'text-white hover:bg-[#333]'
+                                  }`}
+                                >
+                                  {format.toUpperCase()}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </button>
                   </div>
                 </div>

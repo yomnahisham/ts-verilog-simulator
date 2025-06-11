@@ -12,13 +12,14 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import { Allotment } from 'allotment';
 import 'allotment/dist/style.css';
+import { WaveformExporter } from './WaveformExporter';
 
-interface WaveformViewerProps {
+export interface WaveformViewerProps {
   vcdData: string;
   onSignalOptionsDone?: () => void;
 }
 
-interface Signal {
+export interface Signal {
   id: string;
   name: string;
   values: { time: number; value: string }[];
@@ -68,6 +69,16 @@ export interface WaveformViewerRef {
   handleCollapseAll: () => void;
   handleExpandAll: () => void;
   handleSignalOptions: () => void;
+  exportWaveform: (options?: {
+    format?: 'png' | 'svg' | 'pdf';
+    width?: number;
+    height?: number;
+    scale?: number;
+    backgroundColor?: string;
+    showGrid?: boolean;
+    showValues?: boolean;
+    timeRange?: { start: number; end: number };
+  }) => Promise<Blob | string>;
 }
 
 const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcdData, onSignalOptionsDone }, ref) => {
@@ -142,6 +153,10 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
   // Add state for signal options modal
   const [showSignalOptions, setShowSignalOptions] = useState(false);
+
+  // Add after the showSignalOptions state
+  const [showDownloadOptions, setShowDownloadOptions] = useState(false);
+  const [selectedFormat, setSelectedFormat] = useState<'png' | 'svg' | 'pdf'>('png');
 
   const generateBitSignals = (signal: Signal): Signal[] => {
     // Check if we already have generated bit signals for this bus
@@ -333,7 +348,6 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     }
   };
 
-  // These helper functions were removed as they're not being used
 
   // Update the constants for proper header spacing
   const TIME_AXIS_HEIGHT = 30;
@@ -401,6 +415,26 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     },
     handleSignalOptions: () => {
       setShowSignalOptions(v => !v);
+    },
+    exportWaveform: async (options = {}) => {
+      const exporter = new WaveformExporter(
+        signals,
+        maxTime,
+        timeScale,
+        pan,
+        zoom,
+        {
+          format: 'png',
+          width: canvasRef.current?.width || 800,
+          height: canvasRef.current?.height || 600,
+          scale: window.devicePixelRatio || 1,
+          backgroundColor: WAVE_BG,
+          showGrid,
+          showValues,
+          ...options
+        }
+      );
+      return exporter.export();
     }
   }));
 

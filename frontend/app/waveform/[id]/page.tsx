@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import WaveformViewer, { WaveformViewerRef } from '../../components/WaveformViewer';
 import { useParams } from 'next/navigation';
 
-const BACKEND_BASE_URL = 'https://ts-verilog-simulator-backend.onrender.com';
+const BACKEND_BASE_URL = 'http://localhost:8001'; //'https://ts-verilog-simulator-backend.onrender.com';
 
 export default function WaveformPage() {
   const params = useParams();
