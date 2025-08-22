@@ -13,7 +13,8 @@ interface File {
 }
 
 // Backend configuration-> make it 'http://localhost:8001' when running locally
-const BACKEND_BASE_URL = 'https://ts-verilog-simulator-backend.onrender.com';
+const BACKEND_BASE_URL = 'http://localhost:8001';
+//const BACKEND_BASE_URL = 'https://ts-verilog-simulator-backend.onrender.com';
 const BACKEND_API_URL = `${BACKEND_BASE_URL}/api/v1`;
 const USE_REAL_SIMULATION = true; // Flag to use real simulation instead of mock data
 
