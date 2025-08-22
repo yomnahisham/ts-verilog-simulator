@@ -94,6 +94,9 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   const [showGrid, setShowGrid] = useState(true);
   const [showValues, setShowValues] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [secondCursorTime, setSecondCursorTime] = useState<number | null>(null);
+  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
+  const [dragMode, setDragMode] = useState<'pan' | 'select' | null>(null);
 
   // Styling constants for classic EDA look
   const SIGNAL_PANEL_BG = '#111';
@@ -114,6 +117,12 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   const SIGNAL_ROW_HEIGHT = 30;
   const SIGNAL_LINE_WIDTH = 2;
   const SELECTED_SIGNAL_LINE_WIDTH = 3;
+  // Hexagon styling constants (shape only; colors stay ours)
+  const HEX_BEVEL_RATIO = 0.20;
+  const HEX_MIN_INSET = 4;
+  const HEX_EDGE_INSET = 0.5;
+  const HEX_LABEL_PAD_X = 4;
+  const HEX_LABEL_EXTRA = 4;
 
   // Calculate dynamic font sizes based on signal height and zoom
   const getFontSizes = (signalHeight: number) => ({
@@ -142,6 +151,60 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
   // Add state for signal options modal
   const [showSignalOptions, setShowSignalOptions] = useState(false);
+
+  // VCD timescale (e.g., 1 ns). Used for axis labeling and Δt formatting.
+  type TimeUnit = 'fs' | 'ps' | 'ns' | 'us' | 'ms' | 's';
+  const unitToSeconds: Record<TimeUnit, number> = {
+    fs: 1e-15,
+    ps: 1e-12,
+    ns: 1e-9,
+    us: 1e-6,
+    ms: 1e-3,
+    s: 1,
+  };
+  const [timescaleValue, setTimescaleValue] = useState<number>(1);
+  const [timescaleUnit, setTimescaleUnit] = useState<TimeUnit>('ns');
+  const toSeconds = (t: number) => t * timescaleValue * unitToSeconds[timescaleUnit];
+  const formatTimeWithBestUnit = (rawTime: number) => {
+    const sec = toSeconds(rawTime);
+    const candidates: { unit: TimeUnit; factor: number }[] = [
+      { unit: 'fs', factor: 1e-15 },
+      { unit: 'ps', factor: 1e-12 },
+      { unit: 'ns', factor: 1e-9 },
+      { unit: 'us', factor: 1e-6 },
+      { unit: 'ms', factor: 1e-3 },
+      { unit: 's', factor: 1 },
+    ];
+    // Choose unit so that value is between ~0.1 and 10000 for readability
+    let best = candidates[2];
+    for (const c of candidates) {
+      const v = sec / c.factor;
+      if (v >= 0.1 && v < 10000) {
+        best = c;
+        break;
+      }
+    }
+    const val = sec / best.factor;
+    const str = val >= 100 ? val.toFixed(0) : val >= 10 ? val.toFixed(1) : val.toFixed(2);
+    return `${str} ${best.unit}`;
+  };
+
+  // Compute a nice tick step (1/2/5*10^k) to target ~80px spacing
+  const niceStep = (targetPx: number) => {
+    const ideal = targetPx / timeScale; // in raw time units
+    if (ideal <= 0) return 1;
+    const pow10 = Math.pow(10, Math.floor(Math.log10(ideal)));
+    const candidates = [1, 2, 5, 10].map(m => m * pow10);
+    let best = candidates[0];
+    let bestDiff = Math.abs(candidates[0] * timeScale - targetPx);
+    for (const c of candidates) {
+      const diff = Math.abs(c * timeScale - targetPx);
+      if (diff < bestDiff) {
+        best = c; bestDiff = diff;
+      }
+    }
+    return best;
+  };
 
   const generateBitSignals = (signal: Signal): Signal[] => {
     // Check if we already have generated bit signals for this bus
@@ -374,17 +437,25 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
       drawWaveform();
     },
     handleZoomToRange: () => {
-      if (maxTime === 0) return;
-
       const canvas = canvasRef.current;
       if (!canvas) return;
-
-      const width = canvas.width;
-      const targetTimeRange = 60; // 0-60ns
-      const newTimeScale = width / targetTimeRange;
-
+      const width = canvas.width / (window.devicePixelRatio || 1);
+      if (selectionRange) {
+        const start = Math.max(0, Math.min(selectionRange.start, selectionRange.end));
+        const end = Math.max(selectionRange.start, selectionRange.end);
+        if (end > start) {
+          const newScale = width / (end - start);
+          setPan(start);
+          setTimeScale(newScale);
+          setZoom(newScale / (width / Math.max(maxTime, 1e-9)));
+          drawWaveform();
+          return;
+        }
+      }
+      if (maxTime === 0) return;
+      const newTimeScale = width / maxTime;
       setTimeScale(newTimeScale);
-      setZoom(newTimeScale / (width / maxTime));
+      setZoom(1);
       setPan(0);
       drawWaveform();
     },
@@ -410,6 +481,19 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
     console.log('Starting VCD parsing...');
     const lines = vcdData.split('\n');
+    // Parse timescale if present
+    const tsLine = lines.find(l => l.startsWith('$timescale'));
+    if (tsLine) {
+      const match = tsLine.match(/\$timescale\s+(\d+)\s*(fs|ps|ns|us|ms|s)\s+\$end/);
+      if (match) {
+        const val = parseInt(match[1], 10);
+        const unit = match[2] as TimeUnit;
+        if (!isNaN(val)) {
+          setTimescaleValue(val);
+          setTimescaleUnit(unit);
+        }
+      }
+    }
     const idToName: Record<string, string> = {};
     const idToWidth: Record<string, number> = {};
     const tempSignals: Record<string, Signal> = {};
@@ -592,28 +676,54 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     if (!showGrid) return;
 
     ctx.save();
+    // Horizontal rows
     ctx.strokeStyle = GRID_COLOR;
     ctx.lineWidth = 0.5;
-    ctx.setLineDash([1, 3]); // Dotted line pattern
-
-    // Vertical grid lines - start after header
-    const gridStepPx = 25;
-    for (let x = 0; x < width; x += gridStepPx) {
-      ctx.beginPath();
-      ctx.moveTo(x, TOP_MARGIN);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
-
-    // Horizontal grid lines - start after header
+    ctx.setLineDash([1, 3]);
     for (let y = TOP_MARGIN; y < height; y += SIGNAL_ROW_HEIGHT) {
+      const yy = Math.floor(y) + 0.5;
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
+      ctx.moveTo(0, yy);
+      ctx.lineTo(width, yy);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    // Vertical time grid with adaptive major/minor ticks
+    const minorStep = niceStep(60);
+    const majorStep = minorStep * 5;
+    const firstMinor = Math.floor(pan / minorStep) * minorStep;
+    const firstMajor = Math.floor(pan / majorStep) * majorStep;
+
+    // Minor lines
+    ctx.strokeStyle = '#333';
+    for (let t = firstMinor; t <= maxTime; t += minorStep) {
+      const x = (t - pan) * timeScale;
+      if (x < 0 || x > width) continue;
+      const xx = Math.floor(x) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(xx, TOP_MARGIN);
+      ctx.lineTo(xx, height);
       ctx.stroke();
     }
 
-    ctx.setLineDash([]); // Reset line style
+    // Major lines + labels
+    ctx.strokeStyle = '#444';
+    ctx.fillStyle = '#fff';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    for (let t = firstMajor; t <= maxTime; t += majorStep) {
+      const x = (t - pan) * timeScale;
+      if (x < 0 || x > width) continue;
+      const xx = Math.floor(x) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(xx, 0);
+      ctx.lineTo(xx, height);
+      ctx.stroke();
+      const label = formatTimeWithBestUnit(t);
+      ctx.fillText(label, x, TIME_AXIS_HEIGHT - 5);
+    }
+
     ctx.restore();
   };
 
@@ -628,7 +738,7 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
     // Prepare tooltip content
     const lines = [
-      `Time: ${info.time}`,
+      `Time: ${formatTimeWithBestUnit(info.time)}`,
       `Signal: ${info.signal}`,
       `Value: ${info.value}`
     ];
@@ -667,20 +777,140 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
   };
 
   // Add drawCursor function before drawWaveform
-  const drawCursor = (ctx: CanvasRenderingContext2D, info: HoverInfo, width: number, height: number) => {
-    const cx = (info.time - pan) * timeScale;
-    if (cx >= 0 && cx <= width) {
-      // Draw cursor line
-      ctx.strokeStyle = CURSOR_COLOR;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(cx, 0);
-      ctx.lineTo(cx, height);
-      ctx.stroke();
-
-      // Draw tooltip
-      drawTooltip(ctx, cx, info.y, info);
+  const drawCursors = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    // Primary hover/cursor
+    if (hoverInfo) {
+      const cx = (hoverInfo.time - pan) * timeScale;
+      if (cx >= 0 && cx <= width) {
+        ctx.strokeStyle = CURSOR_COLOR;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(Math.floor(cx) + 0.5, 0);
+        ctx.lineTo(Math.floor(cx) + 0.5, height);
+        ctx.stroke();
+        drawTooltip(ctx, cx, hoverInfo.y, hoverInfo);
+      }
     }
+
+    // Second cursor and Δt overlay
+    if (cursorTime != null && secondCursorTime != null) {
+      const cx1 = (cursorTime - pan) * timeScale;
+      const cx2 = (secondCursorTime - pan) * timeScale;
+      ctx.save();
+      ctx.strokeStyle = '#FF7F50';
+      ctx.lineWidth = 1;
+      [cx1, cx2].forEach(x => {
+        if (x >= 0 && x <= width) {
+          ctx.beginPath();
+          ctx.moveTo(Math.floor(x) + 0.5, 0);
+          ctx.lineTo(Math.floor(x) + 0.5, height);
+          ctx.stroke();
+        }
+      });
+      // Δt banner
+      const dtRaw = Math.abs(secondCursorTime - cursorTime);
+      const dtLabel = `Δt = ${formatTimeWithBestUnit(dtRaw)}`;
+      const bx = Math.min(Math.max(Math.min(cx1, cx2), 5), width - 150);
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.strokeStyle = '#FF7F50';
+      ctx.lineWidth = 1;
+      ctx.fillRect(bx, 2, 140, 20);
+      ctx.strokeRect(bx, 2, 140, 20);
+      ctx.fillStyle = '#FF7F50';
+      ctx.font = '12px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(dtLabel, bx + 70, 12);
+      ctx.restore();
+    }
+  };
+
+  // Draw a Vivado-style hexagon capsule for bus values
+  const drawHexValue = (
+    ctx: CanvasRenderingContext2D,
+    xStart: number,
+    xEnd: number,
+    yCenter: number,
+    height: number,
+    text: string,
+    options?: { fill?: string; stroke?: string }
+  ) => {
+    if (xEnd <= xStart) return;
+    const segmentWidth = xEnd - xStart;
+    // Match vertical size with digital rails (~2/3 of row height)                                                    │
+    const capsuleHeight = Math.max(1, Math.min(height * (2/3), height - 2));  
+    const halfH = capsuleHeight / 2;
+    const yTop = yCenter - halfH;
+    const yBot = yCenter + halfH;
+    // Use bevel ratio and inset similar to inspiration
+    const corner = Math.min(halfH, Math.max(HEX_MIN_INSET, Math.floor(capsuleHeight * HEX_BEVEL_RATIO)));
+    const insetStart = xStart + HEX_EDGE_INSET;
+    const insetEnd = xEnd - HEX_EDGE_INSET;
+    const usableWidth = Math.max(0, insetEnd - insetStart);
+
+    ctx.save();
+    ctx.beginPath();
+    // Left angled edge
+    ctx.moveTo(insetStart, yCenter);
+    ctx.lineTo(insetStart + corner, yTop);
+    // Top edge
+    ctx.lineTo(insetEnd - corner, yTop);
+    // Right angled edge
+    ctx.lineTo(insetEnd, yCenter);
+    // Bottom edge
+    ctx.lineTo(insetEnd - corner, yBot);
+    ctx.lineTo(insetStart + corner, yBot);
+    ctx.closePath();
+
+    ctx.fillStyle = options?.fill || 'rgba(0, 0, 0, 0.7)';
+    ctx.strokeStyle = options?.stroke || BUS_COLOR;
+    ctx.lineWidth = 1;
+    ctx.fill();
+    ctx.stroke();
+
+    // Optional hatching for X/Z values to improve readability
+    const isX = /x/i.test(text);
+    const isZ = /z/i.test(text);
+    if (isX || isZ) {
+      // Recreate path and clip
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(insetStart, yCenter);
+      ctx.lineTo(insetStart + corner, yTop);
+      ctx.lineTo(insetEnd - corner, yTop);
+      ctx.lineTo(insetEnd, yCenter);
+      ctx.lineTo(insetEnd - corner, yBot);
+      ctx.lineTo(insetStart + corner, yBot);
+      ctx.closePath();
+      ctx.clip();
+      ctx.strokeStyle = isX ? '#AA4444' : '#AA9944';
+      ctx.lineWidth = 1;
+      const step = 6;
+      for (let xx = insetStart - (yBot - yTop); xx < insetEnd + (yBot - yTop); xx += step) {
+        ctx.beginPath();
+        ctx.moveTo(xx, yBot);
+        ctx.lineTo(xx + (yBot - yTop), yTop);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Draw centered text, shrink font if needed to fit
+    ctx.fillStyle = BUS_COLOR;
+    let fontSize = 12;
+    ctx.font = `${fontSize}px monospace`;
+    let textWidth = ctx.measureText(text).width;
+    const padding = HEX_LABEL_PAD_X;
+    if (textWidth > usableWidth - padding * 2) {
+      const ratio = (usableWidth - padding * 2) / Math.max(8, textWidth);
+      fontSize = Math.max(9, Math.floor(fontSize * ratio));
+      ctx.font = `${fontSize}px monospace`;
+      textWidth = ctx.measureText(text).width;
+    }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, insetStart + usableWidth / 2, yCenter);
+    ctx.restore();
   };
 
   // Update the drawWaveform function's multi-bit signal handling
@@ -701,28 +931,10 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
 
     drawGrid(ctx, width, height);
 
-    // Draw time axis
+    // Time axis background strip (labels are drawn in grid)
     ctx.save();
-    ctx.strokeStyle = GRID_COLOR;
-    ctx.lineWidth = 1;
-    const timeStepPx = 50;
-    const timeStep = timeStepPx / timeScale;
-    let t0 = Math.floor(pan / timeStep) * timeStep;
-    
-    for (let t = t0; t <= maxTime; t += timeStep) {
-      const x = (t - pan) * timeScale;
-      if (x < 0 || x > width) continue;
-      
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, TIME_AXIS_HEIGHT);
-      ctx.stroke();
-      
-      ctx.fillStyle = '#fff';
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(t.toString(), x, TIME_AXIS_HEIGHT - 5);
-    }
+    ctx.fillStyle = '#0b0b0b';
+    ctx.fillRect(0, 0, width, TIME_AXIS_HEIGHT);
     ctx.restore();
 
     // Start drawing signals
@@ -731,142 +943,191 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     for (const signal of signals) {
       const yCenter = currentY + (SIGNAL_ROW_HEIGHT / 2);
       const amplitude = SIGNAL_ROW_HEIGHT / 3;
+      // Alternate row shading and hover/selection highlight
+      ctx.save();
+      const isOdd = Math.floor(currentY / SIGNAL_ROW_HEIGHT) % 2 === 1;
+      if (isOdd) {
+        ctx.fillStyle = 'rgba(255,255,255,0.02)';
+        ctx.fillRect(0, currentY, width, SIGNAL_ROW_HEIGHT);
+      }
+      if (selectedSignal === signal.name) {
+        ctx.fillStyle = 'rgba(41,134,245,0.10)';
+        ctx.fillRect(0, currentY, width, SIGNAL_ROW_HEIGHT);
+      } else if (hoverInfo && hoverInfo.y >= currentY && hoverInfo.y < currentY + SIGNAL_ROW_HEIGHT) {
+        ctx.fillStyle = 'rgba(255,255,255,0.04)';
+        ctx.fillRect(0, currentY, width, SIGNAL_ROW_HEIGHT);
+      }
+      ctx.restore();
       
       if (signal.width === 1) {
-        // Single-bit signal drawing
+        // Single-bit signal drawing with X/Z support and vertical 0/1 connectors
         const highY = yCenter - amplitude;
         const lowY = yCenter + amplitude;
-        
-        ctx.beginPath();
-        ctx.strokeStyle = signal.color || WAVE_COLOR;
-        let lastValue = getSignalValueAtTime(signal, Math.max(0, pan));
-        let lastY = lastValue === '1' ? highY : lowY;
-        
-        ctx.moveTo(0, lastY);
-        
-        for (const { time, value } of signal.values) {
-          const x = (time - pan) * timeScale;
-          if (x < 0) continue;
-          if (x > width) break;
+        const midY = yCenter;
 
-          const newY = value === '1' ? highY : lowY;
-          ctx.lineTo(x, lastY);
-          if (newY !== lastY) {
-            ctx.lineTo(x, newY);
-          }
-          lastY = newY;
-        }
+        const visibleStartTime = pan;
+        const visibleEndTime = pan + width / timeScale;
         
-        ctx.lineTo(width, lastY);
-        ctx.stroke();
+        const getYForValue = (v: string) => (v === '1' ? highY : v === '0' ? lowY : midY);
+
+        const drawHorizontal = (t0: number, t1: number, v: string) => {
+          const x0 = (t0 - pan) * timeScale;
+          const x1 = (t1 - pan) * timeScale;
+          const startX = Math.max(0, x0);
+          const endX = Math.min(width, x1);
+          if (endX <= startX) return;
+          ctx.beginPath();
+          ctx.strokeStyle = signal.color || WAVE_COLOR;
+          ctx.lineWidth = selectedSignal === signal.name ? SELECTED_SIGNAL_LINE_WIDTH : SIGNAL_LINE_WIDTH;
+          ctx.lineCap = 'round';
+          // Unknown 'x' dashed, High-Z 'z' dotted
+          if (v === 'x' || v === 'X') ctx.setLineDash([6, 4]);
+          else if (v === 'z' || v === 'Z') ctx.setLineDash([2, 4]);
+          else ctx.setLineDash([]);
+          const y = Math.floor(getYForValue(v)) + 0.5;
+          ctx.moveTo(startX, y);
+          ctx.lineTo(endX, y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Draw scalar label if wide enough
+          const segWidth = endX - startX;
+          if ((v === '0' || v === '1') && segWidth > 48) {
+            ctx.save();
+            ctx.fillStyle = '#B0B0B0';
+            ctx.font = '11px monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillText(v.toUpperCase(), startX + 6, yCenter - amplitude * 0.4);
+            ctx.restore();
+          }
+        };
+
+        // Use binary search to find first change >= visibleStartTime
+        const values = signal.values;
+        let left = 0, right = values.length - 1, startIdx = values.length;
+        while (left <= right) {
+          const mid = Math.floor((left + right) / 2);
+          if (values[mid].time >= visibleStartTime) { startIdx = mid; right = mid - 1; } else { left = mid + 1; }
+        }
+        let prevTime = visibleStartTime;
+        let prevValue = getSignalValueAtTime(signal, Math.max(0, visibleStartTime));
+        const minSegPx = 0.75; // LOD: collapse extremely narrow segments
+        for (let i = Math.max(0, startIdx - 1); i < values.length; i++) {
+          const change = values[i];
+          const t = change.time;
+          if (t <= visibleStartTime) { prevValue = change.value; continue; }
+          if (t > visibleEndTime) break;
+          const wPx = (t - prevTime) * timeScale;
+          if (wPx >= minSegPx) {
+            drawHorizontal(prevTime, t, prevValue);
+          } else {
+            // draw tiny tick for collapsed segment
+            const x = (t - pan) * timeScale;
+            const screenX = Math.max(0, Math.min(width, x));
+            ctx.beginPath();
+            ctx.strokeStyle = signal.color || WAVE_COLOR;
+            ctx.lineWidth = 1;
+            ctx.moveTo(Math.floor(screenX) + 0.5, yCenter - amplitude * 0.4);
+            ctx.lineTo(Math.floor(screenX) + 0.5, yCenter + amplitude * 0.4);
+            ctx.stroke();
+          }
+          const isPrev01 = prevValue === '0' || prevValue === '1';
+          const isNew01 = change.value === '0' || change.value === '1';
+          if (isPrev01 && isNew01 && prevValue !== change.value) {
+            const x = (t - pan) * timeScale;
+            const screenX = Math.max(0, Math.min(width, x));
+            const yPrev = Math.floor(prevValue === '1' ? highY : lowY) + 0.5;
+            const yNew = Math.floor(change.value === '1' ? highY : lowY) + 0.5;
+            ctx.beginPath();
+            ctx.lineWidth = selectedSignal === signal.name ? SELECTED_SIGNAL_LINE_WIDTH : SIGNAL_LINE_WIDTH;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = signal.color || WAVE_COLOR;
+            ctx.moveTo(screenX, yPrev);
+            ctx.lineTo(screenX, yNew);
+            ctx.stroke();
+          }
+          prevTime = t;
+          prevValue = change.value;
+        }
+        drawHorizontal(prevTime, visibleEndTime, prevValue);
       } else {
-        // Multi-bit signal drawing
+        // Multi-bit signal drawing with hexagon value capsules
         ctx.strokeStyle = BUS_COLOR;
         ctx.fillStyle = BUS_COLOR;
-        
-        // Draw bus boundaries
-        ctx.beginPath();
-        ctx.moveTo(0, yCenter - amplitude);
-        ctx.lineTo(width, yCenter - amplitude);
-        ctx.moveTo(0, yCenter + amplitude);
-        ctx.lineTo(width, yCenter + amplitude);
-        ctx.stroke();
 
-        // Draw transitions and values
-        let lastX = 0;
-        let lastValue = signal.values[0]?.value || '0'.repeat(signal.width);
-        
-        // Draw initial value
-        ctx.font = '12px monospace';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        let displayValue = formatSignalValue(lastValue, signal.width, signal.name, false);
-        ctx.fillText(displayValue, 5, yCenter);
+        // Removed bus boundary lines to avoid extra horizontal lines around hexagons
 
-        // Draw the bus value line
-        ctx.beginPath();
-        ctx.moveTo(0, yCenter);
-        ctx.lineTo(width, yCenter);
-        ctx.stroke();
+        // Determine visible segments
+        const visibleStartTime = pan;
+        const visibleEndTime = pan + width / timeScale;
 
-        // Draw value changes
-        for (let i = 0; i < signal.values.length; i++) {
-          const { time, value } = signal.values[i];
-          const x = (time - pan) * timeScale;
-          
-          if (x < 0) {
-            lastValue = value;
-            lastX = Math.max(0, x);
-            continue;
+        let segmentStartX = (visibleStartTime - pan) * timeScale;
+        let currentValue = getSignalValueAtTime(signal, Math.max(0, visibleStartTime));
+        const values = signal.values;
+        // Binary search for first visible index
+        let l = 0, r = values.length - 1, startIdx = values.length;
+        while (l <= r) { const m = Math.floor((l + r) / 2); if (values[m].time >= visibleStartTime) { startIdx = m; r = m - 1; } else { l = m + 1; } }
+        // Walk through visible changes
+        for (let i = Math.max(0, startIdx - 1); i < values.length; i++) {
+          const change = values[i];
+          const changeTime = change.time;
+          if (changeTime <= visibleStartTime) { currentValue = change.value; continue; }
+          if (changeTime > visibleEndTime) break;
+          const x = (changeTime - pan) * timeScale;
+          const startXClamped = Math.max(0, segmentStartX);
+          const endXClamped = Math.min(width, x);
+          const displayValue = formatSignalValue(currentValue, signal.width, signal.name, false);
+          if (endXClamped - startXClamped >= 18) {
+            drawHexValue(ctx, startXClamped, endXClamped, yCenter, SIGNAL_ROW_HEIGHT, displayValue, {
+              fill: displayValue.includes('x') || displayValue.includes('X') ? 'rgba(128,0,0,0.6)' : displayValue.includes('z') || displayValue.includes('Z') ? 'rgba(128,128,0,0.6)' : 'rgba(0,0,0,0.7)',
+              stroke: BUS_COLOR
+            });
+          } else {
+            // Too narrow to draw a capsule: draw a small tick as a change indicator
+            ctx.beginPath();
+            ctx.strokeStyle = BUS_COLOR;
+            ctx.lineWidth = 1;
+            ctx.moveTo(Math.floor(endXClamped) + 0.5, yCenter - 6);
+            ctx.lineTo(Math.floor(endXClamped) + 0.5, yCenter + 6);
+            ctx.stroke();
           }
-          if (x > width) break;
-
-          // Draw transition line
-          ctx.beginPath();
-          ctx.moveTo(x, yCenter - amplitude);
-          ctx.lineTo(x, yCenter + amplitude);
-          ctx.stroke();
-
-          // Draw value
-          displayValue = formatSignalValue(value, signal.width, signal.name, false);
-          const textWidth = ctx.measureText(displayValue).width;
-          
-          // Calculate next transition point
-          const nextTime = i < signal.values.length - 1 ? signal.values[i + 1].time : maxTime;
-          const nextX = (nextTime - pan) * timeScale;
-          const maxTextX = nextX - textWidth - 5;
-          
-          // Only draw value if there's enough space
-          if (x + 5 < maxTextX) {
-            // Draw value background for better visibility
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(x + 2, yCenter - 10, textWidth + 6, 20);
-            
-            // Draw value text
-            ctx.fillStyle = BUS_COLOR;
-            ctx.fillText(displayValue, x + 5, yCenter);
-          }
-
-          lastX = x;
-          lastValue = value;
+          segmentStartX = x;
+          currentValue = change.value;
         }
 
-        // Draw final value if there's space
-        if (width - lastX > 50) {
-          displayValue = formatSignalValue(lastValue, signal.width, signal.name, false);
-          const textWidth = ctx.measureText(displayValue).width;
-          
-          // Draw value background
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-          ctx.fillRect(lastX + 2, yCenter - 10, textWidth + 6, 20);
-          
-          // Draw value text
-          ctx.fillStyle = BUS_COLOR;
-          ctx.fillText(displayValue, lastX + 5, yCenter);
+        // Draw last segment till viewport end
+        const endX = width;
+        const startXClamped = Math.max(0, segmentStartX);
+        if (endX - startXClamped >= 18) {
+          const displayValue = formatSignalValue(currentValue, signal.width, signal.name, false);
+          drawHexValue(ctx, startXClamped, endX, yCenter, SIGNAL_ROW_HEIGHT * 0.8, displayValue, {
+            fill: displayValue.includes('x') || displayValue.includes('X') ? 'rgba(128,0,0,0.6)' : displayValue.includes('z') || displayValue.includes('Z') ? 'rgba(128,128,0,0.6)' : 'rgba(0,0,0,0.7)',
+            stroke: BUS_COLOR
+          });
         }
 
         // If the bus is expanded, draw individual bit signals
         if (expandedSignals.has(signal.name)) {
           const bitSignals = generateBitSignals(signal);
           const bitHeight = SIGNAL_ROW_HEIGHT * 0.8;
-          
+
           for (let i = 0; i < bitSignals.length; i++) {
             const bitSignal = bitSignals[i];
-            const bitY = currentY + SIGNAL_ROW_HEIGHT + (i * bitHeight);
-            const bitYCenter = bitY + (bitHeight / 2);
+            const bitY = currentY + SIGNAL_ROW_HEIGHT + i * bitHeight;
+            const bitYCenter = bitY + bitHeight / 2;
             const bitAmplitude = bitHeight / 3;
-            
+
             // Draw bit signal
             const highY = bitYCenter - bitAmplitude;
             const lowY = bitYCenter + bitAmplitude;
-            
+
             ctx.beginPath();
             ctx.strokeStyle = DETAIL_COLOR;
             let lastBitValue = getSignalValueAtTime(bitSignal, Math.max(0, pan));
             let lastBitY = lastBitValue === '1' ? highY : lowY;
-            
+
             ctx.moveTo(0, lastBitY);
-            
+
             for (const { time, value } of bitSignal.values) {
               const x = (time - pan) * timeScale;
               if (x < 0) continue;
@@ -879,11 +1140,11 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
               }
               lastBitY = newY;
             }
-            
+
             ctx.lineTo(width, lastBitY);
             ctx.stroke();
           }
-          
+
           // Update currentY to account for expanded bits
           currentY += bitSignals.length * bitHeight;
         }
@@ -892,9 +1153,23 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
       currentY += SIGNAL_ROW_HEIGHT;
     }
 
-    if (hoverInfo) {
-      drawCursor(ctx, hoverInfo, width, height);
+    // Selection overlay
+    if (selectionRange) {
+      const sx = (selectionRange.start - pan) * timeScale;
+      const ex = (selectionRange.end - pan) * timeScale;
+      const x0 = Math.max(0, Math.min(sx, ex));
+      const x1 = Math.min(width, Math.max(sx, ex));
+      if (x1 > x0) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(41, 134, 245, 0.15)';
+        ctx.strokeStyle = '#2986f5';
+        ctx.fillRect(x0, TOP_MARGIN, x1 - x0, height - TOP_MARGIN);
+        ctx.strokeRect(x0 + 0.5, TOP_MARGIN + 0.5, x1 - x0 - 1, height - TOP_MARGIN - 1);
+        ctx.restore();
+      }
     }
+
+    drawCursors(ctx, width, height);
   };
 
   // Handle mouse events
@@ -927,10 +1202,34 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     setIsDragging(true);
     setDragStart({ x: e.clientX, y: e.clientY });
     setLastPan(pan);
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const x = rect ? e.clientX - rect.left : 0;
+    const t = (x + pan) / timeScale;
+    if (e.shiftKey) {
+      setDragMode('select');
+      setSelectionRange({ start: t, end: t });
+    } else {
+      setDragMode('pan');
+    }
   };
 
   const handleMouseUp = () => {
     setIsDragging(false);
+    if (dragMode === 'select' && selectionRange) {
+      const start = Math.max(0, Math.min(selectionRange.start, selectionRange.end));
+      const end = Math.max(selectionRange.start, selectionRange.end);
+      if (end > start) {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const width = canvas.width / (window.devicePixelRatio || 1);
+          const newScale = width / (end - start);
+          setPan(start);
+          setTimeScale(newScale);
+          setZoom(newScale / (width / Math.max(maxTime, 1e-9)));
+        }
+      }
+    }
+    setDragMode(null);
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -943,17 +1242,35 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     // Calculate time at mouse position
     const time = (x + pan) / timeScale;
 
-    // Get all signal values at this time
-    const signalsAtTime = signals.map(signal => ({
-      name: signal.name,
-      value: getSignalValueAtTime(signal, time),
-      color: signal.color || (signal.width > 1 ? BUS_COLOR : WAVE_COLOR)
-    }));
+    // Handle drag modes
+    if (isDragging && dragMode === 'pan') {
+      const dx = e.clientX - dragStart.x;
+      setPan(Math.max(0, lastPan - dx / timeScale));
+    } else if (isDragging && dragMode === 'select' && selectionRange) {
+      setSelectionRange({ start: selectionRange.start, end: time });
+    }
+
+    // Determine hovered signal row accounting for expanded buses
+    let currentY = TOP_MARGIN;
+    let hoveredName = signals[0]?.name || '';
+    for (const sig of signals) {
+      if (y >= currentY && y < currentY + SIGNAL_ROW_HEIGHT) { hoveredName = sig.name; break; }
+      currentY += SIGNAL_ROW_HEIGHT;
+      if (sig.width > 1 && expandedSignals.has(sig.name)) {
+        const bitRows = sig.width;
+        const total = bitRows * (SIGNAL_ROW_HEIGHT * 0.8);
+        if (y < currentY + total) { hoveredName = sig.name; break; }
+        currentY += total;
+      }
+    }
+    const hoveredSig = signals.find(s => s.name === hoveredName) || signals[0];
+    const hoveredVal = hoveredSig ? getSignalValueAtTime(hoveredSig, time) : '';
+    const signalsAtTime = hoveredSig ? [{ name: hoveredSig.name, value: hoveredVal, color: hoveredSig.color || (hoveredSig.width > 1 ? BUS_COLOR : WAVE_COLOR) }] : [];
 
     setHoverInfo({
       time,
-      value: signalsAtTime[0]?.value || '',
-      signal: signalsAtTime[0]?.name || '',
+      value: hoveredVal || '',
+      signal: hoveredSig?.name || '',
       x,
       y,
       signalsAtTime
@@ -972,7 +1289,11 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
     // Set cursor time if clicking in waveform area
     if (x > 20) {
       const t = ((x + pan) / timeScale);
-      setCursorTime(t);
+      if (e.altKey) {
+        setSecondCursorTime(t);
+      } else {
+        setCursorTime(t);
+      }
       return;
     }
 
@@ -1037,6 +1358,8 @@ const WaveformViewer = forwardRef<WaveformViewerRef, WaveformViewerProps>(({ vcd
       });
     }
   }, [signals]);
+
+  // No-op: imperative handle configured above
 
   return (
     <div className="w-full h-full flex flex-col">
