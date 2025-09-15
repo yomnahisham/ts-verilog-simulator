@@ -31,7 +31,7 @@ app = FastAPI(
 )
 
 # Get CORS origins from environment variable or use default
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://opennet.vercel.app").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://open-net.vercel.app").split(",")
 logger.info(f"CORS_ORIGINS: {CORS_ORIGINS}")
 
 app.add_middleware(
@@ -86,7 +86,7 @@ async def health_check():
         },
         status_code=200,
         headers={
-            "Access-Control-Allow-Origin": "https://opennet.vercel.app",
+            "Access-Control-Allow-Origin": "https://open-net.vercel.app",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Accept, Origin",
             "Access-Control-Allow-Credentials": "true"

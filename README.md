@@ -54,7 +54,7 @@ OpenNet replaces heavyweight, licensed EDA tools with a lightweight, accessible 
 ## Getting Started
 
 ### Online Demo
-Access the live demo at: [https://opennet.vercel.app](https://opennet.vercel.app)
+Access the live demo at: [https://open-net.vercel.app](https://open-net.vercel.app)
 
 ### Local Development
 

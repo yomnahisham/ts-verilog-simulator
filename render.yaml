@@ -6,4 +6,4 @@ services:
     dockerfilePath: ./Dockerfile
     envVars:
       - key: CORS_ORIGINS
-        value: https://opennet.vercel.app 
+        value: https://open-net.vercel.app 
