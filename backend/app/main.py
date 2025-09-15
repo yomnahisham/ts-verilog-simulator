@@ -34,11 +34,11 @@ app = FastAPI(
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://open-net.vercel.app").split(",")
 logger.info(f"CORS_ORIGINS: {CORS_ORIGINS}")
 
-# Use a more permissive CORS configuration that's known to work with external hosting
+# Use specific origins with credentials enabled
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now to test
-    allow_credentials=False,  # Set to False when using wildcard origins
+    allow_origins=["https://open-net.vercel.app", "http://localhost:3000"],
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"]
