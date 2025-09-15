@@ -147,7 +147,7 @@ export default function FPGAFlow({ verilogCode, topModule, onFlowComplete }: FPG
     if (selectedDeviceFamily && supportedDevices.synthesis?.[selectedDeviceFamily]) {
       const family = supportedDevices.synthesis[selectedDeviceFamily];
       // Flatten all parts from all device types in the family
-      return Object.values(family).flat();
+      return Object.values(family).flat() as string[];
     }
     return [];
   };
