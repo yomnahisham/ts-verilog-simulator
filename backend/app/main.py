@@ -93,6 +93,19 @@ async def health_check():
         }
     )
 
+@app.options("/health")
+async def health_check_options():
+    return JSONResponse(
+        content={},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "https://open-net.vercel.app",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Accept, Origin",
+            "Access-Control-Allow-Credentials": "true"
+        }
+    )
+
 @app.get("/test")
 async def test_endpoint():
     """Simple test endpoint to verify the serverless function is working"""
@@ -103,6 +116,19 @@ async def test_endpoint():
         "python_version": sys.version,
         "current_dir": os.getcwd(),
     }
+
+@app.options("/api/v1/simulate")
+async def simulate_options():
+    return JSONResponse(
+        content={},
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "https://open-net.vercel.app",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Accept, Origin",
+            "Access-Control-Allow-Credentials": "true"
+        }
+    )
 
 @app.post("/api/v1/simulate", response_model=SimulationResponse)
 async def simulate_verilog(request: SimulationRequest):
