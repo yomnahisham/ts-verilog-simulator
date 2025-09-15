@@ -38,7 +38,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"]
 )
@@ -77,34 +77,12 @@ async def root():
 @app.get("/health")
 async def health_check():
     logger.info("Health check endpoint called")
-    return JSONResponse(
-        content={
-            "status": "healthy",
-            "timestamp": time.time(),
-            "version": "1.0.0",
-            "environment": os.getenv("ENVIRONMENT", "production")
-        },
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "https://open-net.vercel.app",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Accept, Origin",
-            "Access-Control-Allow-Credentials": "true"
-        }
-    )
-
-@app.options("/health")
-async def health_check_options():
-    return JSONResponse(
-        content={},
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "https://open-net.vercel.app",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Accept, Origin",
-            "Access-Control-Allow-Credentials": "true"
-        }
-    )
+    return {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "version": "1.0.0",
+        "environment": os.getenv("ENVIRONMENT", "production")
+    }
 
 @app.get("/test")
 async def test_endpoint():
@@ -116,19 +94,6 @@ async def test_endpoint():
         "python_version": sys.version,
         "current_dir": os.getcwd(),
     }
-
-@app.options("/api/v1/simulate")
-async def simulate_options():
-    return JSONResponse(
-        content={},
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "https://open-net.vercel.app",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Accept, Origin",
-            "Access-Control-Allow-Credentials": "true"
-        }
-    )
 
 @app.post("/api/v1/simulate", response_model=SimulationResponse)
 async def simulate_verilog(request: SimulationRequest):
