@@ -12,7 +12,7 @@ export default function Home() {
 
   useEffect(() => {
     // Animate the loading text
-    const text = 'Verilog-Make';
+    const text = 'OpenNet';
     let currentText = '';
     let currentIndex = 0;
     

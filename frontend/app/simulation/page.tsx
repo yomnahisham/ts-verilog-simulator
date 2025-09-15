@@ -1961,7 +1961,7 @@ export default function SimulationPage() {
         <div className="flex justify-between items-center">
           <div>
             <span className="mr-4">OpenNet</span>
-            <span className="mr-4">Hardware Meets the Web.</span>
+            <span className="mr-4">Hardware Meets the Web</span>
           </div>
           <div>
             <span className="mr-4">Status: {backendStatus === 'online' ? 'Connected' : 'Disconnected'}</span>

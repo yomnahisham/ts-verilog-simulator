@@ -35,12 +35,13 @@ RUN apt-get update && apt-get install -y \
     libxslt1-dev \
     zlib1g-dev \
     libusb-1.0-0-dev \
+    libftdi1-dev \
+    libftdi1-2 \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Install F4PGA toolchain (optional - continue build even if this fails)
-RUN set -e && \
-    echo "Installing F4PGA toolchain..." && \
+RUN echo "Installing F4PGA toolchain..." && \
     for i in 1 2 3; do \
         if git clone --recursive https://github.com/chipsalliance/f4pga-arch-defs.git /opt/f4pga-arch-defs; then \
             echo "F4PGA clone successful on attempt $i"; \
@@ -53,17 +54,18 @@ RUN set -e && \
     done && \
     if [ -d "/opt/f4pga-arch-defs" ]; then \
         cd /opt/f4pga-arch-defs && \
-        make env && \
-        make env && \
-        echo "F4PGA toolchain installed successfully"; \
+        if make env && make env; then \
+            echo "F4PGA toolchain installed successfully"; \
+        else \
+            echo "F4PGA toolchain build failed, continuing without it"; \
+        fi; \
     else \
         echo "F4PGA toolchain installation failed, continuing without it"; \
         mkdir -p /opt/f4pga-arch-defs/build/env/bin; \
     fi
 
 # Install FPGA Open Loader (optional - continue build even if this fails)
-RUN set -e && \
-    echo "Installing openFPGALoader..." && \
+RUN echo "Installing openFPGALoader..." && \
     for i in 1 2 3; do \
         if git clone https://github.com/trabucayre/openFPGALoader.git /opt/openFPGALoader; then \
             echo "openFPGALoader clone successful on attempt $i"; \
@@ -78,10 +80,11 @@ RUN set -e && \
         cd /opt/openFPGALoader && \
         mkdir build && \
         cd build && \
-        cmake .. && \
-        make -j$(nproc) && \
-        make install && \
-        echo "openFPGALoader installed successfully"; \
+        if cmake .. && make -j$(nproc) && make install; then \
+            echo "openFPGALoader installed successfully"; \
+        else \
+            echo "openFPGALoader build failed, continuing without it"; \
+        fi; \
     else \
         echo "openFPGALoader installation failed, continuing without it"; \
     fi

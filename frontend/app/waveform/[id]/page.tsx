@@ -200,7 +200,7 @@ export default function WaveformPage() {
         <div className="flex justify-between items-center">
           <div>
             <span className="mr-4">OpenNet</span>
-            <span className="mr-4">Hardware Meets the Web.</span>
+            <span className="mr-4">Hardware Meets the Web</span>
           </div>
           <div>
             <span>© 2025 Yomna Hisham</span>
