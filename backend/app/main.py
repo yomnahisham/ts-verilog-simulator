@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, validator
 import os
 import logging
@@ -34,10 +34,11 @@ app = FastAPI(
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://open-net.vercel.app").split(",")
 logger.info(f"CORS_ORIGINS: {CORS_ORIGINS}")
 
+# Use a more permissive CORS configuration that's known to work with external hosting
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all origins for now to test
+    allow_credentials=False,  # Set to False when using wildcard origins
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"]
