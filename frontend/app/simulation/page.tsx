@@ -3,6 +3,11 @@
 import { useState, useRef, useEffect } from 'react';
 import Editor, { Monaco, OnMount } from '@monaco-editor/react';
 import WaveformViewer, { WaveformViewerRef } from '../components/WaveformViewer';
+import SynthesisViewer from '../components/SynthesisViewer';
+import ImplementationViewer from '../components/ImplementationViewer';
+import BitstreamViewer from '../components/BitstreamViewer';
+import ProgrammingInterface from '../components/ProgrammingInterface';
+import FPGAFlow from '../components/FPGAFlow';
 
 // Define file type
 interface File {
@@ -339,6 +344,15 @@ export default function SimulationPage() {
   const [warningOutput, setWarningOutput] = useState<string>('');
   const [logOutput, setLogOutput] = useState<string>('');
   const [reportOutput, setReportOutput] = useState<string>('');
+  
+  // FPGA Flow state
+  type MainTab = 'simulation' | 'synthesis' | 'implementation' | 'bitstream' | 'programming' | 'complete_flow';
+  const [activeMainTab, setActiveMainTab] = useState<MainTab>('simulation');
+  const [synthesisResults, setSynthesisResults] = useState<any>(null);
+
+  const [implementationResults, setImplementationResults] = useState<any>(null);
+  const [bitstreamResults, setBitstreamResults] = useState<any>(null);
+  const [programmingResults, setProgrammingResults] = useState<any>(null);
 
   // Update time every second
   useEffect(() => {
@@ -605,7 +619,7 @@ export default function SimulationPage() {
     setFiles(prevFiles => 
       prevFiles.map(file => 
         file.id === activeFileId 
-          ? { ...file, content: value } 
+          ? { ...file, content: value }
           : file
       )
     );
@@ -1203,7 +1217,7 @@ export default function SimulationPage() {
       {/* Top toolbar */}
       <div className="flex items-center justify-between p-2 bg-[#252526] border-b border-[#333]">
         <div className="flex items-center">
-          <div className="text-white font-medium mr-4">Vivado-Make</div>
+          <div className="text-white font-medium mr-4">OpenNet</div>
           <div className="flex items-center">
             <div className={`w-2 h-2 rounded-full mr-2 ${
               backendStatus === 'online' ? 'bg-green-500' : 
@@ -1365,11 +1379,122 @@ export default function SimulationPage() {
         </div>
       </div>
       
+      {/* Main Tab Bar */}
+      <div className="flex border-b border-[#333] bg-[#252526]">
+        <button
+          onClick={() => setActiveMainTab('simulation')}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeMainTab === 'simulation'
+              ? 'border-b-2 border-blue-500 text-blue-400 bg-[#1e1e1e]'
+              : 'text-gray-400 hover:text-gray-300 hover:bg-[#2a2d2e]'
+          }`}
+        >
+          <span className="flex items-center">
+            <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2v2" />
+              <path d="M12 20v2" />
+              <path d="M4.93 4.93l1.41 1.41" />
+              <path d="M17.66 17.66l1.41 1.41" />
+              <path d="M2 12h2" />
+              <path d="M20 12h2" />
+              <path d="M6.34 17.66l-1.41 1.41" />
+              <path d="M19.07 4.93l-1.41 1.41" />
+            </svg>
+            Simulation
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveMainTab('synthesis')}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeMainTab === 'synthesis'
+              ? 'border-b-2 border-green-500 text-green-400 bg-[#1e1e1e]'
+              : 'text-gray-400 hover:text-gray-300 hover:bg-[#2a2d2e]'
+          }`}
+        >
+          <span className="flex items-center">
+            <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 12l2 2 4-4" />
+              <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3" />
+              <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3" />
+              <path d="M12 3c0 1-1 3-3 3s-3-2-3-3 1-3 3-3 3 2 3 3" />
+              <path d="M12 21c0-1 1-3 3-3s3 2 3 3-1 3-3 3-3-2-3-3" />
+            </svg>
+            Synthesis
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveMainTab('implementation')}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeMainTab === 'implementation'
+              ? 'border-b-2 border-yellow-500 text-yellow-400 bg-[#1e1e1e]'
+              : 'text-gray-400 hover:text-gray-300 hover:bg-[#2a2d2e]'
+          }`}
+        >
+          <span className="flex items-center">
+            <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <path d="M9 9h6v6H9z" />
+            </svg>
+            Implementation
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveMainTab('bitstream')}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeMainTab === 'bitstream'
+              ? 'border-b-2 border-purple-500 text-purple-400 bg-[#1e1e1e]'
+              : 'text-gray-400 hover:text-gray-300 hover:bg-[#2a2d2e]'
+          }`}
+        >
+          <span className="flex items-center">
+            <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10 9 9 9 8 9" />
+            </svg>
+            Bitstream
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveMainTab('programming')}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeMainTab === 'programming'
+              ? 'border-b-2 border-red-500 text-red-400 bg-[#1e1e1e]'
+              : 'text-gray-400 hover:text-gray-300 hover:bg-[#2a2d2e]'
+          }`}
+        >
+          <span className="flex items-center">
+            <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+            </svg>
+            Programming
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveMainTab('complete_flow')}
+          className={`px-4 py-2 text-sm font-medium ${
+            activeMainTab === 'complete_flow'
+              ? 'border-b-2 border-indigo-500 text-indigo-400 bg-[#1e1e1e]'
+              : 'text-gray-400 hover:text-gray-300 hover:bg-[#2a2d2e]'
+          }`}
+        >
+          <span className="flex items-center">
+            <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+            Complete Flow
+          </span>
+        </button>
+      </div>
+      
       {/* Main content area */}
       <div className="flex-1 overflow-hidden">
-        <div className="flex h-full">
-          {/* Left panel: Editors */}
-          <div className="w-1/2 flex flex-col border-r border-[#333]">
+        {activeMainTab === 'simulation' && (
+          <div className="flex h-full">
+            {/* Left panel: Editors */}
+            <div className="w-1/2 flex flex-col border-r border-[#333]">
             {/* Tab bar */}
             <div className="flex border-b border-[#333] bg-[#252526] w-full">
               <div className="flex-1 overflow-x-auto whitespace-nowrap flex flex-nowrap scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
@@ -1710,16 +1835,133 @@ export default function SimulationPage() {
               </div>
             </div>
           </div>
-        </div>
+          </div>        )}
+
+        {/* FPGA Flow Components */}
+        {activeMainTab === 'synthesis' && (
+          <SynthesisViewer
+            verilogCode={activeFile?.content || ''}
+            topModule={selectedTopModule}
+            onSynthesisComplete={(results) => {
+              setSynthesisResults(results);
+            }}
+          />
+        )}
+
+        {activeMainTab === 'implementation' && !!synthesisResults && (
+          <ImplementationViewer
+            netlistJson={synthesisResults.results.netlist_json || ''}
+            topModule={selectedTopModule}
+            onImplementationComplete={(results) => {
+              setImplementationResults(results);
+            }}
+          />
+        )}
+
+        {activeMainTab === 'bitstream' && implementationResults && (
+          <BitstreamViewer
+            implementationData={(() => {
+              switch (synthesisResults?.results?.device_family) {
+                case 'xilinx_7series':
+                  return implementationResults.results.fasm_file || '';
+                case 'lattice_ice40':
+                  return implementationResults.results.asc_file || '';
+                case 'lattice_ecp5':
+                  return implementationResults.results.config_file || '';
+                default:
+                  return '';
+              }
+            })()}
+            topModule={selectedTopModule}
+            deviceFamily={synthesisResults?.results?.device_family || 'xilinx_7series'}
+            devicePart={synthesisResults?.results?.device_part || 'xc7a35t'}
+            dataFormat={(() => {
+              switch (synthesisResults?.results?.device_family) {
+                case 'xilinx_7series':
+                  return 'fasm';
+                case 'lattice_ice40':
+                  return 'asc';
+                case 'lattice_ecp5':
+                  return 'config';
+                default:
+                  return 'fasm';
+              }
+            })()}
+            onBitstreamComplete={(results) => {
+              setBitstreamResults(results);
+            }}
+          />
+        )}
+
+        {activeMainTab === 'programming' && bitstreamResults && (
+          <ProgrammingInterface
+            bitstreamB64={bitstreamResults.results.bitstream_file_b64 || ''}
+            deviceFamily={synthesisResults?.results?.device_family || 'xilinx_7series'}
+            devicePart={synthesisResults?.results?.device_part || 'xc7a35t'}
+            onProgrammingComplete={(results) => {
+              setProgrammingResults(results);
+            }}
+          />
+        )}
+
+        {activeMainTab === 'complete_flow' && (
+          <FPGAFlow
+            verilogCode={activeFile?.content || ''}
+            topModule={selectedTopModule}
+            onFlowComplete={(results) => {
+              // Handle complete flow results
+              console.log('Complete flow results:', results);
+            }}
+          />
+        )}
+
+        {/* Show message for incomplete flows */}
+        {activeMainTab === 'implementation' && !synthesisResults && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center text-gray-400">
+              <svg className="mx-auto h-12 w-12 text-gray-500 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <p>Complete synthesis first to proceed with implementation</p>
+            </div>
+          </div>
+        )}
+
+        {activeMainTab === 'bitstream' && !implementationResults && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center text-gray-400">
+              <svg className="mx-auto h-12 w-12 text-gray-500 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <p>Complete implementation first to proceed with bitstream generation</p>
+            </div>
+          </div>
+        )}
+
+        {activeMainTab === 'programming' && !bitstreamResults && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center text-gray-400">
+              <svg className="mx-auto h-12 w-12 text-gray-500 mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <p>Complete bitstream generation first to proceed with programming</p>
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Footer */}
       <div className="bg-[#252526] border-t border-[#333] p-2 text-xs text-gray-400">
         <div className="flex justify-between items-center">
           <div>
-            <span className="mr-4">Vivado-Make</span>
-            <span className="mr-4">Verilog Simulator</span>
-            <span>Waveform Viewer</span>
+            <span className="mr-4">OpenNet</span>
+            <span className="mr-4">Hardware Meets the Web.</span>
           </div>
           <div>
             <span className="mr-4">Status: {backendStatus === 'online' ? 'Connected' : 'Disconnected'}</span>
@@ -1778,7 +2020,7 @@ export default function SimulationPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-[#252526] p-6 rounded-lg shadow-lg w-3/4 max-w-3xl max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-white">How to Use Verilog Make</h2>
+              <h2 className="text-xl font-semibold text-white">How to Use OpenNet</h2>
               <button
                 onClick={() => setShowHelpModal(false)}
                 className="text-gray-400 hover:text-white"
@@ -1793,7 +2035,7 @@ export default function SimulationPage() {
             <div className="space-y-6 text-gray-300">
               <div>
                 <h3 className="text-lg font-medium text-white mb-2">Getting Started</h3>
-                <p>Verilog Make is a web-based tool for simulating Verilog designs. Follow these steps to get started:</p>
+                <p>OpenNet is a web-based tool for simulating Verilog designs. Follow these steps to get started:</p>
                 <ol className="list-decimal pl-5 mt-2 space-y-1">
                   <li>Create or upload your Verilog design file</li>
                   <li>Create or upload your testbench file</li>
@@ -1899,4 +2141,4 @@ endmodule`}</pre>
       )}
     </div>
   );
-} 
+}

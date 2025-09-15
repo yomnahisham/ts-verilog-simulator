@@ -1,10 +1,10 @@
-# Verilog Simulator (Vivado-Make)
+# OpenNet
 
 A modern, web-based Verilog simulator that empowers students and professionals to write, compile, and simulate Verilog code directly in the browser—no local toolchain required. Ideal for education, prototyping, and collaborative development.
 
 ## Project Overview
 
-Verilog Simulator (AKA Vivado-Make) replaces heavyweight, licensed EDA tools with a lightweight, accessible web alternative. Key highlights:
+OpenNet replaces heavyweight, licensed EDA tools with a lightweight, accessible web alternative. Key highlights:
 
 - **Browser-Based**: Write and run Verilog and SystemVerilog testbenches in your browser
 - **Zero Setup**: No local installation—just open the URL and start coding
@@ -54,7 +54,7 @@ Verilog Simulator (AKA Vivado-Make) replaces heavyweight, licensed EDA tools wit
 ## Getting Started
 
 ### Online Demo
-Access the live demo at: [https://ts-verilog-simulator-frontend.vercel.app](https://ts-verilog-simulator-frontend.vercel.app)
+Access the live demo at: [https://opennet.vercel.app](https://opennet.vercel.app)
 
 ### Local Development
 
@@ -66,8 +66,8 @@ Access the live demo at: [https://ts-verilog-simulator-frontend.vercel.app](http
 
 #### Clone & Setup
 ```bash
-git clone https://github.com/yomnahisham/ts-verilog-simulator.git
-cd ts-verilog-simulator
+git clone https://github.com/yomnahisham/opennet.git
+cd opennet
 ```
 
 #### Frontend
@@ -90,8 +90,8 @@ API: http://localhost:8001
 
 ### Docker Deployment
 ```bash
-docker build -t verilog-sim-backend backend/
-docker run -p 8001:8001 verilog-sim-backend
+docker build -t opennet-backend backend/
+docker run -p 8001:8001 opennet-backend
 ```
 
 ## Usage Guide

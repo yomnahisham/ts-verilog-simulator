@@ -1,5 +1,5 @@
 {
-  "name": "verilog-simulator-frontend",
+  "name": "opennet-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {

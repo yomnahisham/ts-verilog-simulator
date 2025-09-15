@@ -199,9 +199,8 @@ export default function WaveformPage() {
       <div className="bg-[#252526] border-t border-[#333] p-2 text-xs text-gray-400">
         <div className="flex justify-between items-center">
           <div>
-            <span className="mr-4">Vivado-Make</span>
-            <span className="mr-4">Verilog Simulator</span>
-            <span>Waveform Viewer</span>
+            <span className="mr-4">OpenNet</span>
+            <span className="mr-4">Hardware Meets the Web.</span>
           </div>
           <div>
             <span>© 2025 Yomna Hisham</span>

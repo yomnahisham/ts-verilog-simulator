@@ -5,7 +5,7 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Vivado-Make',
+  title: 'OpenNet',
   description: 'A modern web-based alternative to Vivado for Verilog simulation',
   icons: {
     icon: [
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Vivado-Make',
+    title: 'OpenNet',
   },
 };
 

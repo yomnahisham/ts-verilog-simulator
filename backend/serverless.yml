@@ -1,4 +1,4 @@
-service: verilog-simulator-backend
+service: opennet-backend
 
 provider:
   name: aws
@@ -31,7 +31,7 @@ custom:
   pythonRequirements:
     layer:
       name: python-deps
-      description: Python dependencies for verilog-simulator
+      description: Python dependencies for opennet
     noDeploy:
       - pytest
       - pytest-cov

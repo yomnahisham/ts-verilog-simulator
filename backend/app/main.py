@@ -8,7 +8,7 @@ import sys
 import json
 import time
 from app.services.verilog_simulator import VerilogSimulator
-from app.api import waveform
+from app.api import waveform, synthesis, flow, bitstream, implementation, programming
 
 # Configure logging to output to stdout/stderr for Vercel
 logging.basicConfig(
@@ -25,13 +25,13 @@ logger.info(f"Python version: {sys.version}")
 logger.info(f"Current working directory: {os.getcwd()}")
 
 app = FastAPI(
-    title="Vivado-Make API",
+    title="OpenNet API",
     description="A modern web-based alternative to Vivado for Verilog simulation",
     version="1.0.0",
 )
 
 # Get CORS origins from environment variable or use default
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://ts-verilog-simulator-frontend.vercel.app").split(",")
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000,https://opennet.vercel.app").split(",")
 logger.info(f"CORS_ORIGINS: {CORS_ORIGINS}")
 
 app.add_middleware(
@@ -86,7 +86,7 @@ async def health_check():
         },
         status_code=200,
         headers={
-            "Access-Control-Allow-Origin": "https://ts-verilog-simulator-frontend.vercel.app",
+            "Access-Control-Allow-Origin": "https://opennet.vercel.app",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Accept, Origin",
             "Access-Control-Allow-Credentials": "true"
@@ -155,8 +155,13 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": f"Internal server error: {str(exc)}"}
     )
 
-# Mount the waveform router
+# Mount all API routers
 app.include_router(waveform.router, prefix="/api/v1/waveform", tags=["waveform"])
+app.include_router(synthesis.router, prefix="/api/v1/synthesis", tags=["synthesis"])
+app.include_router(flow.router, prefix="/api/v1/flow", tags=["flow"])
+app.include_router(bitstream.router, prefix="/api/v1/bitstream", tags=["bitstream"])
+app.include_router(implementation.router, prefix="/api/v1/implementation", tags=["implementation"])
+app.include_router(programming.router, prefix="/api/v1/programming", tags=["programming"])
 
 # Handler for AWS Lambda
 from mangum import Mangum

@@ -1,6 +1,6 @@
 {
-  "name": "Vivado-Make",
-  "short_name": "Vivado-Make",
+  "name": "OpenNet",
+  "short_name": "OpenNet",
   "description": "A modern web-based alternative to Vivado for Verilog simulation",
   "start_url": "/",
   "display": "standalone",
