@@ -35,22 +35,6 @@ OpenNet replaces heavyweight, licensed EDA tools with a lightweight, accessible 
 └── render.yaml       # Render deployment configuration
 ```
 
-## Key Features
-
-### Current
-- **Real-Time Simulation**: Compile & simulate modules and testbenches on-the-fly
-- **Waveform Viewer**: Interactive VCD waveform plot with zoom, pan, and cursor
-- **Syntax Highlighting**: Monaco Editor integration for Verilog/SystemVerilog
-- **Auto Module Detection**: Discover module and testbench entries automatically
-- **Error Reporting**: Inline compiler errors linked to source code lines
-- **Responsive Design**: Mobile and tablet support for on-the-go access
-- **Serverless Frontend**: Hosted on Vercel for zero-maintenance scalability
-
-### Upcoming
-- **Collaborative Coding**: Real-time multi-user editing and shared simulation sessions
-- **Advanced Waveform Tools**: Signal markers, measurement cursors, and export options
-- **AI-Assisted Testbenches**: Generate testbench scaffolds with GPT-based prompts
-
 ## Getting Started
 
 ### Online Demo
